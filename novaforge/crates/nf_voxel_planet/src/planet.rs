@@ -1,6 +1,8 @@
 use bevy::prelude::*;
 use bevy::render::mesh::{Indices, PrimitiveTopology};
 use bevy::render::render_asset::RenderAssetUsages;
+use bevy::tasks::{AsyncComputeTaskPool, Task};
+use bevy::tasks::futures_lite::future;
 use noise::{Fbm, MultiFractal, NoiseFn, Perlin};
 use std::f32::consts::PI;
 
@@ -92,7 +94,8 @@ impl Plugin for PlanetPlugin {
                     handle_regen_world,
                     unload_distant_chunks,
                     queue_chunks_around_viewpoint,
-                    generate_pending_chunks,
+                    spawn_chunk_generation_tasks,
+                    poll_chunk_generation_tasks,
                     remesh_dirty_chunks,
                 )
                     .chain(),
@@ -136,6 +139,7 @@ fn rebuild_noise_on_settings_change(
         chunk_mgr.loaded.remove(&chunk.position);
     }
     chunk_mgr.pending.clear();
+    chunk_mgr.in_flight.clear();
 }
 
 
@@ -279,6 +283,7 @@ fn handle_regen_world(
             chunk_mgr.loaded.remove(&chunk.position);
         }
         chunk_mgr.pending.clear();
+        chunk_mgr.in_flight.clear();
     }
 }
 
@@ -290,6 +295,7 @@ fn unload_distant_chunks(
     mut commands:   Commands,
     viewpoint:      Res<ChunkViewpoint>,
     chunk_query:    Query<(Entity, &VoxelChunk)>,
+    task_query:     Query<(Entity, &ChunkGenerationTask)>,
     mut chunk_mgr:  ResMut<ChunkManager>,
     world_settings: Res<WorldSettings>,
 ) {
@@ -307,11 +313,21 @@ fn unload_distant_chunks(
     let rd        = world_settings.render_distance;
     let unload_sq = (rd + 2) * (rd + 2);
 
+    // Unload finalised chunk entities
     for (entity, chunk) in &chunk_query {
         let d = chunk.position - view_chunk;
         if d.x * d.x + d.y * d.y + d.z * d.z > unload_sq {
             commands.entity(entity).despawn_recursive();
             chunk_mgr.loaded.remove(&chunk.position);
+        }
+    }
+
+    // Also despawn stale task entities (chunk went out of range while in-flight)
+    for (entity, task) in &task_query {
+        let d = task.coord - view_chunk;
+        if d.x * d.x + d.y * d.y + d.z * d.z > unload_sq {
+            chunk_mgr.in_flight.remove(&task.coord);
+            commands.entity(entity).despawn();
         }
     }
 }
@@ -338,6 +354,7 @@ fn queue_chunks_around_viewpoint(
                 }
                 let coord = IVec3::new(cx + dx, cy + dy, cz + dz);
                 if !chunk_mgr.loaded.contains_key(&coord)
+                    && !chunk_mgr.in_flight.contains(&coord)
                     && !chunk_mgr.pending.contains(&coord)
                 {
                     chunk_mgr.pending.push_back(coord);
@@ -347,15 +364,39 @@ fn queue_chunks_around_viewpoint(
     }
 }
 
-fn generate_pending_chunks(
+// ────────────────────────────────────────────────────────────────────────────
+//  Background-threaded chunk generation
+// ────────────────────────────────────────────────────────────────────────────
+
+/// Raw mesh geometry produced on a background thread (no GPU handles).
+struct ChunkMeshData {
+    positions:    Vec<[f32; 3]>,
+    normals:      Vec<[f32; 3]>,
+    colors:       Vec<[f32; 4]>,
+    indices:      Vec<u32>,
+    vertex_count: u32,
+}
+
+type ChunkTaskOutput = (IVec3, Vec<Voxel>, u32, Option<ChunkMeshData>);
+
+/// Wraps a background chunk generation task together with the target coord.
+#[derive(Component)]
+pub struct ChunkGenerationTask {
+    pub coord: IVec3,
+    task:      Task<ChunkTaskOutput>,
+}
+
+/// Dequeue pending chunk positions and spawn background generation tasks.
+/// At most `max_chunks_per_frame` new tasks are spawned each frame to avoid
+/// flooding the thread pool with too much work at once.
+fn spawn_chunk_generation_tasks(
     mut commands:   Commands,
-    mut meshes:     ResMut<Assets<Mesh>>,
     mut materials:  ResMut<Assets<StandardMaterial>>,
     mut chunk_mgr:  ResMut<ChunkManager>,
     mut cache:      ResMut<NoiseCache>,
     world_settings: Res<WorldSettings>,
 ) {
-    // Ensure the shared chunk material exists.
+    // Ensure the shared chunk material exists (main-thread only asset).
     if cache.chunk_mat.is_none() {
         cache.chunk_mat = Some(materials.add(StandardMaterial {
             perceptual_roughness: 0.92,
@@ -364,22 +405,61 @@ fn generate_pending_chunks(
             ..default()
         }));
     }
-    let mat = cache.chunk_mat.clone().unwrap();
 
-    let mut generated = 0;
-    while generated < world_settings.max_chunks_per_frame {
+    let pool = AsyncComputeTaskPool::get();
+    let mut spawned = 0;
+
+    while spawned < world_settings.max_chunks_per_frame {
         let Some(coord) = chunk_mgr.pending.pop_front() else { break };
-
-        if chunk_mgr.loaded.contains_key(&coord) {
+        if chunk_mgr.loaded.contains_key(&coord) || chunk_mgr.in_flight.contains(&coord) {
             continue;
         }
 
-        let (voxels, solid_count) = generate_chunk_data(
-            coord,
-            &cache.height_fbm,
-            &cache.moisture_fbm,
-            cache.max_terrain_height,
-        );
+        // Clone the FBMs so the closure is `'static` (Fbm<Perlin>: Clone+Send+Sync).
+        let height_fbm   = cache.height_fbm.clone();
+        let moisture_fbm = cache.moisture_fbm.clone();
+        let max_h        = cache.max_terrain_height;
+
+        let task = pool.spawn(async move {
+            let (voxels, solid_count) =
+                generate_chunk_data(coord, &height_fbm, &moisture_fbm, max_h);
+            let mesh_data = build_chunk_mesh_data(&voxels);
+            (coord, voxels, solid_count, mesh_data)
+        });
+
+        chunk_mgr.in_flight.insert(coord);
+        commands.spawn(ChunkGenerationTask { coord, task });
+        spawned += 1;
+    }
+}
+
+/// Poll completed background tasks and materialise chunk entities.
+fn poll_chunk_generation_tasks(
+    mut commands:   Commands,
+    mut meshes:     ResMut<Assets<Mesh>>,
+    mut chunk_mgr:  ResMut<ChunkManager>,
+    cache:          Res<NoiseCache>,
+    mut task_query: Query<(Entity, &mut ChunkGenerationTask)>,
+) {
+    let Some(mat) = cache.chunk_mat.clone() else { return };
+
+    for (task_entity, mut ct) in &mut task_query {
+        // Non-blocking poll — returns immediately if not done.
+        let Some((coord, voxels, solid_count, mesh_data)) =
+            future::block_on(future::poll_once(&mut ct.task))
+        else {
+            continue;
+        };
+
+        // Remove from in-flight set.
+        chunk_mgr.in_flight.remove(&coord);
+        // Despawn the temporary task entity.
+        commands.entity(task_entity).despawn();
+
+        // Chunk may have been loaded already (e.g. noise regen happened).
+        if chunk_mgr.loaded.contains_key(&coord) {
+            continue;
+        }
 
         let cs     = (CHUNK_SIZE as f32) * VOXEL_SIZE;
         let origin = Vec3::new(
@@ -388,41 +468,99 @@ fn generate_pending_chunks(
             coord.z as f32 * cs,
         );
 
-        if let Some((mesh, vertex_count)) = build_chunk_mesh(&voxels) {
-            let entity = commands
-                .spawn((
-                    PbrBundle {
-                        mesh:      meshes.add(mesh),
-                        material:  mat.clone(),
-                        transform: Transform::from_translation(origin),
-                        ..default()
-                    },
-                    VoxelChunk { position: coord },
-                    VoxelData(voxels),
-                    ChunkInfo { solid_voxel_count: solid_count, vertex_count },
-                    Name::new(format!("Chunk({},{},{})", coord.x, coord.y, coord.z)),
-                ))
-                .id();
-
+        if let Some(data) = mesh_data {
+            let vertex_count = data.vertex_count;
+            let mesh         = mesh_from_data(data);
+            let entity = commands.spawn((
+                PbrBundle {
+                    mesh:      meshes.add(mesh),
+                    material:  mat.clone(),
+                    transform: Transform::from_translation(origin),
+                    ..default()
+                },
+                VoxelChunk { position: coord },
+                VoxelData(voxels),
+                ChunkInfo { solid_voxel_count: solid_count, vertex_count },
+                Name::new(format!("Chunk({},{},{})", coord.x, coord.y, coord.z)),
+            )).id();
             chunk_mgr.loaded.insert(coord, entity);
         } else {
-            // Empty chunk (all air): store a placeholder so we do not re-queue it.
-            let entity = commands
-                .spawn((
-                    TransformBundle::from_transform(Transform::from_translation(origin)),
-                    VisibilityBundle::default(),
-                    VoxelChunk { position: coord },
-                    VoxelData(voxels),
-                    ChunkInfo { solid_voxel_count: 0, vertex_count: 0 },
-                    Name::new(format!("Chunk({},{},{})", coord.x, coord.y, coord.z)),
-                ))
-                .id();
-
+            // Air-only chunk: invisible placeholder.
+            let entity = commands.spawn((
+                TransformBundle::from_transform(Transform::from_translation(origin)),
+                VisibilityBundle::default(),
+                VoxelChunk { position: coord },
+                VoxelData(voxels),
+                ChunkInfo { solid_voxel_count: 0, vertex_count: 0 },
+                Name::new(format!("Chunk({},{},{})", coord.x, coord.y, coord.z)),
+            )).id();
             chunk_mgr.loaded.insert(coord, entity);
         }
-
-        generated += 1;
     }
+}
+
+/// Build raw mesh data on a background thread (no GPU resources).
+fn build_chunk_mesh_data(voxels: &[Voxel]) -> Option<ChunkMeshData> {
+    let cs = CHUNK_SIZE as i32;
+
+    let mut positions: Vec<[f32; 3]> = Vec::new();
+    let mut normals:   Vec<[f32; 3]> = Vec::new();
+    let mut colors:    Vec<[f32; 4]> = Vec::new();
+    let mut indices:   Vec<u32>      = Vec::new();
+
+    const DIRS: [(i32, i32, i32); 6] = [
+        (1, 0, 0), (-1, 0, 0),
+        (0, 1, 0), (0, -1, 0),
+        (0, 0, 1), (0, 0, -1),
+    ];
+
+    for lx in 0..cs {
+        for ly in 0..cs {
+            for lz in 0..cs {
+                let v = get_voxel(voxels, lx, ly, lz);
+                if !v.is_solid() { continue; }
+
+                let color = v.color();
+                let ox = lx as f32;
+                let oy = ly as f32;
+                let oz = lz as f32;
+
+                for (dx, dy, dz) in DIRS {
+                    let neighbour = get_voxel(voxels, lx + dx, ly + dy, lz + dz);
+                    if neighbour.is_solid() { continue; }
+
+                    let base      = positions.len() as u32;
+                    let face_verts = face_vertices(ox, oy, oz, dx, dy, dz);
+                    let normal    = [dx as f32, dy as f32, dz as f32];
+
+                    for fv in &face_verts {
+                        positions.push(*fv);
+                        normals.push(normal);
+                        colors.push(color);
+                    }
+                    indices.extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 3, base]);
+                }
+            }
+        }
+    }
+
+    if positions.is_empty() { return None; }
+
+    let vertex_count = positions.len() as u32;
+    Some(ChunkMeshData { positions, normals, colors, indices, vertex_count })
+}
+
+/// Assemble a `Mesh` from pre-computed [`ChunkMeshData`] on the main thread.
+fn mesh_from_data(data: ChunkMeshData) -> Mesh {
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, data.positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL,   data.normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR,    data.colors);
+    mesh.insert_indices(Indices::U32(data.indices));
+    mesh
 }
 
 // ---------------------------------------------------------------------------
@@ -493,7 +631,7 @@ fn generate_chunk_data(
 
 #[inline]
 fn voxel_index(x: usize, y: usize, z: usize) -> usize {
-    x + y * CHUNK_SIZE + z * CHUNK_SIZE * CHUNK_SIZE
+    chunk_voxel_index(x, y, z)
 }
 
 #[inline]
@@ -530,61 +668,9 @@ fn remesh_dirty_chunks(
 // ---------------------------------------------------------------------------
 
 pub fn build_chunk_mesh(voxels: &[Voxel]) -> Option<(Mesh, u32)> {
-    let cs = CHUNK_SIZE as i32;
-
-    let mut positions: Vec<[f32; 3]> = Vec::new();
-    let mut normals:   Vec<[f32; 3]> = Vec::new();
-    let mut colors:    Vec<[f32; 4]> = Vec::new();
-    let mut indices:   Vec<u32>      = Vec::new();
-
-    const DIRS: [(i32, i32, i32); 6] = [
-        (1, 0, 0), (-1, 0, 0),
-        (0, 1, 0), (0, -1, 0),
-        (0, 0, 1), (0, 0, -1),
-    ];
-
-    for lx in 0..cs {
-        for ly in 0..cs {
-            for lz in 0..cs {
-                let v = get_voxel(voxels, lx, ly, lz);
-                if !v.is_solid() { continue; }
-
-                let color = v.color();
-                let ox = lx as f32;
-                let oy = ly as f32;
-                let oz = lz as f32;
-
-                for (dx, dy, dz) in DIRS {
-                    let neighbour = get_voxel(voxels, lx + dx, ly + dy, lz + dz);
-                    if neighbour.is_solid() { continue; }
-
-                    let base      = positions.len() as u32;
-                    let face_verts = face_vertices(ox, oy, oz, dx, dy, dz);
-                    let normal    = [dx as f32, dy as f32, dz as f32];
-
-                    for fv in &face_verts {
-                        positions.push(*fv);
-                        normals.push(normal);
-                        colors.push(color);
-                    }
-                    indices.extend_from_slice(&[base, base + 1, base + 2, base + 2, base + 3, base]);
-                }
-            }
-        }
-    }
-
-    if positions.is_empty() { return None; }
-
-    let vertex_count = positions.len() as u32;
-    let mut mesh = Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
-    );
-    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL,   normals);
-    mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR,    colors);
-    mesh.insert_indices(Indices::U32(indices));
-    Some((mesh, vertex_count))
+    let data = build_chunk_mesh_data(voxels)?;
+    let vertex_count = data.vertex_count;
+    Some((mesh_from_data(data), vertex_count))
 }
 
 fn face_vertices(ox: f32, oy: f32, oz: f32, dx: i32, dy: i32, dz: i32) -> [[f32; 3]; 4] {

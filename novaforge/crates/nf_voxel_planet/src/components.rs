@@ -173,9 +173,12 @@ impl Default for WorldTime {
 #[derive(Resource, Default)]
 pub struct ChunkManager {
     /// Map from chunk grid position to the corresponding entity.
-    pub loaded:  HashMap<IVec3, Entity>,
+    pub loaded:    HashMap<IVec3, Entity>,
     /// Queue of chunk positions waiting to be generated.
-    pub pending: VecDeque<IVec3>,
+    pub pending:   VecDeque<IVec3>,
+    /// Positions of chunks whose generation tasks are currently in flight.
+    /// Prevents duplicate task spawning.
+    pub in_flight: std::collections::HashSet<IVec3>,
 }
 
 /// Current weather state.

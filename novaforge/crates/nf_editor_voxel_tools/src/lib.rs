@@ -447,9 +447,10 @@ fn voxel_edit_system(
 }
 
 /// Returns the voxel index in a flat chunk array.
+/// Delegates to the canonical implementation in `nf_voxel_planet`.
 #[inline]
 fn voxel_index(x: usize, y: usize, z: usize) -> usize {
-    x + y * CHUNK_SIZE + z * CHUNK_SIZE * CHUNK_SIZE
+    nf_voxel_planet::chunk_voxel_index(x, y, z)
 }
 
 /// Apply the brush to voxels around the hit location and return the edits made.

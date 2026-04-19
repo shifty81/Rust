@@ -38,6 +38,29 @@ impl Voxel {
         !matches!(self, Voxel::Air | Voxel::Water)
     }
 
+    /// Return the raw `repr(u8)` byte for binary serialisation.
+    #[inline]
+    pub fn to_u8(self) -> u8 { self as u8 }
+
+    /// Reconstruct a [`Voxel`] from a raw byte.  Unknown values become
+    /// [`Voxel::Air`] so corrupted files degrade gracefully.
+    #[inline]
+    pub fn from_u8(b: u8) -> Self {
+        match b {
+            1  => Self::Stone,
+            2  => Self::Dirt,
+            3  => Self::Grass,
+            4  => Self::Sand,
+            5  => Self::Sandstone,
+            6  => Self::Snow,
+            7  => Self::Ice,
+            8  => Self::Water,
+            9  => Self::Gravel,
+            10 => Self::Rock,
+            _  => Self::Air,
+        }
+    }
+
     /// SRGB colour [r, g, b, a] used for vertex colouring.
     pub fn color(self) -> [f32; 4] {
         match self {

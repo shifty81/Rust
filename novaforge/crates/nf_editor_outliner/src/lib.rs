@@ -3,7 +3,7 @@
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
 use nf_editor_core::{EditorMode, EntityLabel};
-use nf_selection::{FocusedEntity, SelectionChanged};
+use nf_selection::{FocusedEntity, SelectedEntities, SelectionChanged};
 use nf_voxel_planet::{
     ChunkManager, GrassDecoration, Moon, Planet, Player, Sun, Tree, VoxelChunk, WeatherParticle,
     WeatherState,
@@ -103,16 +103,21 @@ fn draw_outliner_panel(
     entities:     Query<(Entity, Option<&EntityLabel>, Option<&Parent>)>,
     children_q:   Query<&Children>,
     mut focused:  ResMut<FocusedEntity>,
+    mut selected: ResMut<SelectedEntities>,
     mut changed:  EventWriter<SelectionChanged>,
     mode:         Res<State<EditorMode>>,
     chunk_mgr:    Res<ChunkManager>,
     weather:      Res<WeatherState>,
+    // For batch-delete of selected chunks
+    chunk_query:  Query<Entity, With<VoxelChunk>>,
+    mut commands: Commands,
 ) {
     if *mode.get() != EditorMode::Editing {
         return;
     }
 
     let ctx = contexts.ctx_mut();
+    let ctrl_held = ctx.input(|i| i.modifiers.ctrl);
 
     egui::SidePanel::left("nf_outliner")
         .default_width(260.0)
@@ -129,6 +134,39 @@ fn draw_outliner_panel(
                 }
             });
             ui.separator();
+
+            // ── Batch-delete toolbar ─────────────────────────────────────
+            if !selected.is_empty() {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(format!("{} selected", selected.len()))
+                            .color(egui::Color32::from_rgb(180, 220, 100))
+                            .small(),
+                    );
+                    if ui.small_button("✖ Delete Selected Chunks").clicked() {
+                        // Despawn selected entities that are chunks.
+                        let to_delete: Vec<Entity> = selected
+                            .iter()
+                            .copied()
+                            .filter(|e| chunk_query.contains(*e))
+                            .collect();
+                        for entity in &to_delete {
+                            commands.entity(*entity).despawn_recursive();
+                        }
+                        // Clear selection and focused if deleted.
+                        if focused.0.map_or(false, |e| to_delete.contains(&e)) {
+                            focused.0 = None;
+                        }
+                        selected.clear();
+                        changed.send(SelectionChanged);
+                    }
+                    if ui.small_button("✕ Clear").clicked() {
+                        selected.clear();
+                        changed.send(SelectionChanged);
+                    }
+                });
+                ui.separator();
+            }
 
             let filter = state.search.to_lowercase();
 
@@ -148,7 +186,7 @@ fn draw_outliner_panel(
                             "Saturn","Uranus","Neptune","SunLight"]
                             .iter().any(|p| name.contains(p))
                         {
-                            entity_row(ui, entity, name, &mut focused, &mut changed, &filter);
+                            entity_row(ui, entity, name, &mut focused, &mut selected, &mut changed, &filter, ctrl_held);
                         }
                     }
                 });
@@ -160,7 +198,7 @@ fn draw_outliner_panel(
                     .default_open(true)
                     .show(ui, |ui| {
                         for &entity in &counts.planets {
-                            entity_row(ui, entity, "Planet", &mut focused, &mut changed, &filter);
+                            entity_row(ui, entity, "Planet", &mut focused, &mut selected, &mut changed, &filter, ctrl_held);
                         }
                     });
 
@@ -174,7 +212,7 @@ fn draw_outliner_panel(
                 .default_open(false)
                 .show(ui, |ui| {
                     for &entity in &counts.chunks {
-                        entity_row(ui, entity, "Chunk", &mut focused, &mut changed, &filter);
+                        entity_row(ui, entity, "Chunk", &mut focused, &mut selected, &mut changed, &filter, ctrl_held);
                     }
                 });
 
@@ -217,7 +255,7 @@ fn draw_outliner_panel(
                         .default_open(true)
                         .show(ui, |ui| {
                             for &entity in &counts.players {
-                                entity_row(ui, entity, "Player", &mut focused, &mut changed, &filter);
+                                entity_row(ui, entity, "Player", &mut focused, &mut selected, &mut changed, &filter, ctrl_held);
                             }
                         });
                 }
@@ -280,16 +318,11 @@ fn draw_outliner_panel(
                                 continue;
                             }
 
-                            let is_focused = focused.0 == Some(entity);
                             ui.horizontal(|ui| {
                                 if *depth > 0 {
                                     ui.add_space(*depth as f32 * 16.0);
                                 }
-                                let row = ui.selectable_label(is_focused, &lbl);
-                                if row.clicked() {
-                                    focused.0 = if is_focused { None } else { Some(entity) };
-                                    changed.send(SelectionChanged);
-                                }
+                                entity_row(ui, entity, &lbl, &mut focused, &mut selected, &mut changed, &filter, ctrl_held);
                             });
                         }
                     });
@@ -298,13 +331,18 @@ fn draw_outliner_panel(
 }
 
 /// Helper: render a single entity row and handle focus click.
+///
+/// * Plain click → single-select (clears multi-selection, sets FocusedEntity).
+/// * Ctrl+click  → add/remove entity from multi-selection only.
 fn entity_row(
-    ui:      &mut egui::Ui,
-    entity:  Entity,
-    name:    &str,
-    focused: &mut FocusedEntity,
-    changed: &mut EventWriter<SelectionChanged>,
-    filter:  &str,
+    ui:       &mut egui::Ui,
+    entity:   Entity,
+    name:     &str,
+    focused:  &mut FocusedEntity,
+    selected: &mut SelectedEntities,
+    changed:  &mut EventWriter<SelectionChanged>,
+    filter:   &str,
+    ctrl:     bool,
 ) {
     let display = if name.is_empty() {
         format!("Entity({entity:?})")
@@ -314,10 +352,27 @@ fn entity_row(
     if !filter.is_empty() && !display.to_lowercase().contains(filter) {
         return;
     }
-    let is_focused = focused.0 == Some(entity);
-    let row = ui.selectable_label(is_focused, &display);
+    let is_focused    = focused.0 == Some(entity);
+    let is_selected   = selected.is_selected(entity);
+    // Highlight multi-selected rows in a distinct colour.
+    let label = if is_selected && !is_focused {
+        egui::RichText::new(&display).color(egui::Color32::from_rgb(100, 180, 255))
+    } else {
+        egui::RichText::new(&display)
+    };
+    let row = ui.selectable_label(is_focused, label);
     if row.clicked() {
-        focused.0 = if is_focused { None } else { Some(entity) };
+        if ctrl {
+            // Ctrl+click: toggle multi-selection; keep focused on primary
+            selected.toggle(entity);
+            if focused.0.is_none() {
+                focused.0 = Some(entity);
+            }
+        } else {
+            // Plain click: single-select
+            selected.set_single(entity);
+            focused.0 = if is_focused { None } else { Some(entity) };
+        }
         changed.send(SelectionChanged);
     }
 }

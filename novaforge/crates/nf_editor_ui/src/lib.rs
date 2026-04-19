@@ -7,6 +7,10 @@ use nf_editor_scene::{NewSceneRequest, OpenSceneRequest, SaveSceneRequest};
 use nf_editor_play::{StartPie, StopPie, PausePie};
 use nf_editor_viewport::TeleportEditorCamera;
 use nf_commands::{UndoRequested, RedoRequested, CommandHistory};
+use nf_voxel_planet::{SaveWorldRequest, LoadWorldRequest};
+
+/// Default path used when saving the voxel world data.
+const DEFAULT_WORLD_SAVE_PATH: &str = "world.voxelworld";
 
 /// Placeholder path used when no file dialog is available yet.
 const OPEN_SCENE_PLACEHOLDER: &str = "project/Scenes/untitled.nfscene";
@@ -50,19 +54,21 @@ fn keyboard_shortcuts(
 // ────────────────────────────────────────────────────────────────────────────
 
 fn draw_menu_bar(
-    mut contexts:    EguiContexts,
-    mut mode_ev:     EventWriter<RequestEditorMode>,
-    mode:            Res<State<EditorMode>>,
-    mut new_ev:      EventWriter<NewSceneRequest>,
-    mut open_ev:     EventWriter<OpenSceneRequest>,
-    mut save_ev:     EventWriter<SaveSceneRequest>,
-    mut undo_ev:     EventWriter<UndoRequested>,
-    mut redo_ev:     EventWriter<RedoRequested>,
-    mut start_ev:    EventWriter<StartPie>,
-    mut stop_ev:     EventWriter<StopPie>,
-    mut pause_ev:    EventWriter<PausePie>,
-    mut teleport_ev: EventWriter<TeleportEditorCamera>,
-    history:         Res<CommandHistory>,
+    mut contexts:     EguiContexts,
+    mut mode_ev:      EventWriter<RequestEditorMode>,
+    mode:             Res<State<EditorMode>>,
+    mut new_ev:       EventWriter<NewSceneRequest>,
+    mut open_ev:      EventWriter<OpenSceneRequest>,
+    mut save_ev:      EventWriter<SaveSceneRequest>,
+    mut undo_ev:      EventWriter<UndoRequested>,
+    mut redo_ev:      EventWriter<RedoRequested>,
+    mut start_ev:     EventWriter<StartPie>,
+    mut stop_ev:      EventWriter<StopPie>,
+    mut pause_ev:     EventWriter<PausePie>,
+    mut teleport_ev:  EventWriter<TeleportEditorCamera>,
+    mut save_world_ev: EventWriter<SaveWorldRequest>,
+    mut load_world_ev: EventWriter<LoadWorldRequest>,
+    history:          Res<CommandHistory>,
 ) {
     let ctx = contexts.ctx_mut();
     let current_mode = *mode.get();
@@ -82,6 +88,15 @@ fn draw_menu_bar(
                 }
                 if ui.button("Save Scene").clicked() {
                     save_ev.send(SaveSceneRequest);
+                    ui.close_menu();
+                }
+                ui.separator();
+                if ui.button("💾 Save World Data").clicked() {
+                    save_world_ev.send(SaveWorldRequest(DEFAULT_WORLD_SAVE_PATH.into()));
+                    ui.close_menu();
+                }
+                if ui.button("📂 Load World Data").clicked() {
+                    load_world_ev.send(LoadWorldRequest(DEFAULT_WORLD_SAVE_PATH.into()));
                     ui.close_menu();
                 }
                 ui.separator();

@@ -299,11 +299,23 @@ fn draw_selection_gizmo(
     );
 
     // Draw RGB axis arrows from the entity origin.
+    // In Local mode the axes follow the entity's rotation; in World mode they
+    // always point along the world X/Y/Z axes.
     let len    = GIZMO_AXIS_LEN;
     let origin = tf.translation;
-    gizmos.line(origin, origin + Vec3::X * len, Color::srgb(1.0, 0.15, 0.15));
-    gizmos.line(origin, origin + Vec3::Y * len, Color::srgb(0.15, 1.0, 0.15));
-    gizmos.line(origin, origin + Vec3::Z * len, Color::srgb(0.15, 0.15, 1.0));
+    let (ax, ay, az) = match *mode {
+        GizmoMode::Translate => (
+            tf.rotation * Vec3::X,
+            tf.rotation * Vec3::Y,
+            tf.rotation * Vec3::Z,
+        ),
+        // Rotate / Scale always show world-space axes so the interaction
+        // arrows are easy to read regardless of entity orientation.
+        _ => (Vec3::X, Vec3::Y, Vec3::Z),
+    };
+    gizmos.line(origin, origin + ax * len, Color::srgb(1.0, 0.15, 0.15));
+    gizmos.line(origin, origin + ay * len, Color::srgb(0.15, 1.0, 0.15));
+    gizmos.line(origin, origin + az * len, Color::srgb(0.15, 0.15, 1.0));
 }
 
 // ────────────────────────────────────────────────────────────────────────────

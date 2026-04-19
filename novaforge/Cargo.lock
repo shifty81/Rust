@@ -2894,6 +2894,7 @@ dependencies = [
  "nf_editor_play",
  "nf_editor_scene",
  "nf_editor_viewport",
+ "nf_voxel_planet",
 ]
 
 [[package]]

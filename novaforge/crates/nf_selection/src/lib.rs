@@ -83,6 +83,40 @@ pub struct SelectionChanged;
 #[derive(Resource, Default, Debug)]
 pub struct FocusedEntity(pub Option<Entity>);
 
+/// Entities currently selected in the editor (multi-select).
+///
+/// Written by the Outliner (Ctrl+click) and viewport (Ctrl+LMB).
+/// Read by gizmos (draw highlight boxes) and batch commands (delete/move/hide).
+#[derive(Resource, Default, Debug)]
+pub struct SelectedEntities(pub std::collections::HashSet<Entity>);
+
+impl SelectedEntities {
+    /// Replace the set with exactly this entity.
+    pub fn set_single(&mut self, entity: Entity) {
+        self.0.clear();
+        self.0.insert(entity);
+    }
+
+    /// Add or remove the entity (Ctrl+click behaviour).
+    pub fn toggle(&mut self, entity: Entity) {
+        if !self.0.remove(&entity) {
+            self.0.insert(entity);
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.0.clear();
+    }
+
+    pub fn is_selected(&self, entity: Entity) -> bool {
+        self.0.contains(&entity)
+    }
+
+    pub fn len(&self) -> usize { self.0.len() }
+    pub fn is_empty(&self) -> bool { self.0.is_empty() }
+    pub fn iter(&self) -> impl Iterator<Item = &Entity> { self.0.iter() }
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Plugin
 // ────────────────────────────────────────────────────────────────────────────
@@ -94,6 +128,7 @@ impl Plugin for SelectionPlugin {
         app
             .init_resource::<SelectionState>()
             .init_resource::<FocusedEntity>()
+            .init_resource::<SelectedEntities>()
             .add_event::<SelectionChanged>();
     }
 }
