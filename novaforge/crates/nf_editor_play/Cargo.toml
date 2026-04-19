@@ -6,6 +6,7 @@ description = "Play-In-Editor and Simulate modes: world serialization, runtime w
 
 [dependencies]
 bevy           = { workspace = true }
+bevy_egui      = { workspace = true }
 nf_core        = { workspace = true }
 nf_scene       = { workspace = true }
 nf_editor_core = { workspace = true }

@@ -2850,6 +2850,7 @@ name = "nf_editor_play"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bevy_egui",
  "nf_core",
  "nf_editor_core",
  "nf_scene",
@@ -2891,6 +2892,7 @@ dependencies = [
  "nf_editor_core",
  "nf_editor_play",
  "nf_editor_scene",
+ "nf_editor_viewport",
 ]
 
 [[package]]

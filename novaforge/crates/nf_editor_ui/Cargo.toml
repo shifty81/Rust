@@ -5,10 +5,11 @@ edition = "2021"
 description = "egui-based editor shell: main menu bar, toolbar, docking layout, and panel rendering."
 
 [dependencies]
-bevy           = { workspace = true }
-bevy_egui      = { workspace = true }
-nf_core        = { workspace = true }
-nf_editor_core = { workspace = true }
-nf_editor_scene = { workspace = true }
-nf_editor_play = { workspace = true }
-nf_commands    = { workspace = true }
+bevy              = { workspace = true }
+bevy_egui         = { workspace = true }
+nf_core           = { workspace = true }
+nf_editor_core    = { workspace = true }
+nf_editor_scene   = { workspace = true }
+nf_editor_play    = { workspace = true }
+nf_editor_viewport = { workspace = true }
+nf_commands       = { workspace = true }

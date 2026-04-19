@@ -44,12 +44,43 @@ fn update_sky_color(
     mut clear_color:  ResMut<ClearColor>,
     mut sun_light_q:  Query<&mut DirectionalLight, With<SunLight>>,
     mut ambient:      ResMut<AmbientLight>,
+    player_q:         Query<&Transform, With<Player>>,
 ) {
     let t         = world_time.day_fraction;
     let sun_angle = (t - 0.25) * 2.0 * PI;
     let elevation = sun_angle.sin();
 
-    clear_color.0 = sky_gradient(elevation);
+    // ── Altitude-based sky colour ────────────────────────────────────────────
+    let altitude = if let Ok(player_tf) = player_q.get_single() {
+        (player_tf.translation.length() - PLANET_RADIUS).max(0.0)
+    } else {
+        0.0
+    };
+
+    if altitude >= ATMOSPHERE_HEIGHT {
+        // Space — pure black sky.
+        clear_color.0 = Color::linear_rgb(0.0, 0.0, 0.0);
+        if let Ok(mut sun_light) = sun_light_q.get_single_mut() {
+            // Sun still illuminates objects in space.
+            sun_light.illuminance = 80_000.0;
+            sun_light.color = Color::WHITE;
+        }
+        ambient.brightness = 5.0; // very dim in space
+        return;
+    }
+
+    let sky_base = sky_gradient(elevation);
+
+    if altitude > ATMOSPHERE_FADE_START {
+        // Fade sky colour toward black approaching space.
+        let t_fade = (altitude - ATMOSPHERE_FADE_START)
+            / (ATMOSPHERE_HEIGHT - ATMOSPHERE_FADE_START);
+        let LinearRgba { red, green, blue, .. } = sky_base.to_linear();
+        let fade = 1.0 - t_fade * t_fade;
+        clear_color.0 = Color::linear_rgb(red * fade, green * fade, blue * fade);
+    } else {
+        clear_color.0 = sky_base;
+    }
 
     if let Ok(mut sun_light) = sun_light_q.get_single_mut() {
         let intensity  = (elevation * 1.5).clamp(0.0, 1.0);
@@ -94,6 +125,7 @@ fn update_fog(
     world_time: Res<WorldTime>,
     weather:    Res<WeatherState>,
     mut fog_q:  Query<&mut FogSettings, With<PlayerCamera>>,
+    player_q:   Query<&Transform, With<Player>>,
 ) {
     let Ok(mut fog) = fog_q.get_single_mut() else { return };
 
@@ -111,7 +143,42 @@ fn update_fog(
         WeatherKind::Cloudy => (FOG_START * 0.80, FOG_END * 0.85),
         WeatherKind::Clear  => (FOG_START,          FOG_END),
     };
-    fog.falloff = FogFalloff::Linear { start: fog_start, end: fog_end };
+
+    // ── Altitude-based atmosphere fade ──────────────────────────────────────
+    // Above `ATMOSPHERE_FADE_START`: progressively push the fog out; fog colour
+    // blends toward black (space).  Above `ATMOSPHERE_HEIGHT`: no fog at all.
+    let altitude = if let Ok(player_tf) = player_q.get_single() {
+        (player_tf.translation.length() - PLANET_RADIUS).max(0.0)
+    } else {
+        0.0
+    };
+
+    if altitude >= ATMOSPHERE_HEIGHT {
+        // Space: effectively no fog — push it beyond any visible geometry.
+        fog.falloff = FogFalloff::Linear {
+            start: PLANET_RADIUS * 10.0,
+            end:   PLANET_RADIUS * 20.0,
+        };
+        fog.color = Color::linear_rgb(0.0, 0.0, 0.0);
+    } else if altitude > ATMOSPHERE_FADE_START {
+        let t = (altitude - ATMOSPHERE_FADE_START)
+            / (ATMOSPHERE_HEIGHT - ATMOSPHERE_FADE_START);
+        // Exponentially push fog distance out.
+        let exp_t = t * t;
+        let s = fog_start  + (PLANET_RADIUS * 5.0 - fog_start)  * exp_t;
+        let e = fog_end    + (PLANET_RADIUS * 10.0 - fog_end)   * exp_t;
+        fog.falloff = FogFalloff::Linear { start: s, end: e };
+
+        // Blend sky colour toward black as we approach space.
+        let LinearRgba { red: fr, green: fg, blue: fb, .. } = fog.color.to_linear();
+        fog.color = Color::linear_rgb(
+            fr * (1.0 - exp_t),
+            fg * (1.0 - exp_t),
+            fb * (1.0 - exp_t),
+        );
+    } else {
+        fog.falloff = FogFalloff::Linear { start: fog_start, end: fog_end };
+    }
 }
 
 fn update_weather(

@@ -11,6 +11,10 @@ use crate::config::*;
 #[derive(Component)]
 pub struct Planet;
 
+/// The sea-level ocean mesh that surrounds the planet.
+#[derive(Component)]
+pub struct Ocean;
+
 /// The star (sun) entity.
 #[derive(Component)]
 pub struct Sun;
@@ -66,6 +70,9 @@ pub struct PlayerState {
     pub is_grounded: bool,
     /// How long the player has been grounded (for coyote-time, etc.).
     pub grounded_timer: f32,
+    /// True while the player is in free-fly / space-flight mode.
+    /// Gravity and surface alignment are disabled; movement follows camera look.
+    pub is_flying: bool,
 }
 
 impl Default for PlayerState {
@@ -76,6 +83,7 @@ impl Default for PlayerState {
             pitch: 0.0,
             is_grounded: false,
             grounded_timer: 0.0,
+            is_flying: false,
         }
     }
 }

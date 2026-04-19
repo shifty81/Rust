@@ -5,6 +5,7 @@ use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use nf_editor_core::{EditorMode, RequestEditorMode};
 use nf_editor_scene::{NewSceneRequest, OpenSceneRequest, SaveSceneRequest};
 use nf_editor_play::{StartPie, StopPie, PausePie};
+use nf_editor_viewport::TeleportEditorCamera;
 use nf_commands::{UndoRequested, RedoRequested, CommandHistory};
 
 /// Placeholder path used when no file dialog is available yet.
@@ -49,18 +50,19 @@ fn keyboard_shortcuts(
 // ────────────────────────────────────────────────────────────────────────────
 
 fn draw_menu_bar(
-    mut contexts:  EguiContexts,
-    mut mode_ev:   EventWriter<RequestEditorMode>,
-    mode:          Res<State<EditorMode>>,
-    mut new_ev:    EventWriter<NewSceneRequest>,
-    mut open_ev:   EventWriter<OpenSceneRequest>,
-    mut save_ev:   EventWriter<SaveSceneRequest>,
-    mut undo_ev:   EventWriter<UndoRequested>,
-    mut redo_ev:   EventWriter<RedoRequested>,
-    mut start_ev:  EventWriter<StartPie>,
-    mut stop_ev:   EventWriter<StopPie>,
-    mut pause_ev:  EventWriter<PausePie>,
-    history:       Res<CommandHistory>,
+    mut contexts:    EguiContexts,
+    mut mode_ev:     EventWriter<RequestEditorMode>,
+    mode:            Res<State<EditorMode>>,
+    mut new_ev:      EventWriter<NewSceneRequest>,
+    mut open_ev:     EventWriter<OpenSceneRequest>,
+    mut save_ev:     EventWriter<SaveSceneRequest>,
+    mut undo_ev:     EventWriter<UndoRequested>,
+    mut redo_ev:     EventWriter<RedoRequested>,
+    mut start_ev:    EventWriter<StartPie>,
+    mut stop_ev:     EventWriter<StopPie>,
+    mut pause_ev:    EventWriter<PausePie>,
+    mut teleport_ev: EventWriter<TeleportEditorCamera>,
+    history:         Res<CommandHistory>,
 ) {
     let ctx = contexts.ctx_mut();
     let current_mode = *mode.get();
@@ -119,12 +121,26 @@ fn draw_menu_bar(
                 }
             });
 
-            // ── Window ───────────────────────────────────────────────────
-            ui.menu_button("Window", |ui| {
+            // ── View ─────────────────────────────────────────────────────
+            ui.menu_button("View", |ui| {
+                ui.label(egui::RichText::new("Editor Camera").weak().small());
+                ui.separator();
+                if ui.button("🌌  Solar System Overview  [Home]").clicked() {
+                    teleport_ev.send(TeleportEditorCamera::SolarSystem);
+                    ui.close_menu();
+                }
+                if ui.button("🌍  Planet Surface Overview  [End]").clicked() {
+                    teleport_ev.send(TeleportEditorCamera::PlanetSurface);
+                    ui.close_menu();
+                }
+                ui.separator();
+                ui.label(egui::RichText::new("Panels").weak().small());
+                ui.separator();
                 if ui.button("Outliner").clicked() { ui.close_menu(); }
                 if ui.button("Details").clicked() { ui.close_menu(); }
                 if ui.button("Content Browser").clicked() { ui.close_menu(); }
                 if ui.button("Output Log").clicked() { ui.close_menu(); }
+                if ui.button("🌍 World Settings").clicked() { ui.close_menu(); }
             });
 
             // ── Play toolbar ─────────────────────────────────────────────

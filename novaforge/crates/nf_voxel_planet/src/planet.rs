@@ -129,6 +129,28 @@ fn setup_planet(
         Planet,
         Name::new("Planet"),
     ));
+
+    // ── Ocean / sea-level sphere ─────────────────────────────────────────────
+    // A slightly-transparent sphere at exactly sea-level radius.  Blended on
+    // top of the planet overview so shallow oceans and beaches show beneath.
+    commands.spawn((
+        PbrBundle {
+            mesh: meshes.add(Sphere::new(SEA_LEVEL).mesh().uv(64, 32)),
+            material: materials.add(StandardMaterial {
+                base_color: Color::srgba(0.04, 0.22, 0.62, 0.72),
+                alpha_mode: AlphaMode::Blend,
+                perceptual_roughness: 0.05,
+                metallic: 0.1,
+                reflectance: 0.6,
+                double_sided: false,
+                ..default()
+            }),
+            transform: Transform::default(),
+            ..default()
+        },
+        crate::components::Ocean,
+        Name::new("Ocean"),
+    ));
 }
 
 fn build_planet_mesh(seed: u32) -> Mesh {
