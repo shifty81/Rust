@@ -1,0 +1,10 @@
+[package]
+name    = "nf_commands"
+version = "0.1.0"
+edition = "2021"
+description = "Command-based undo/redo system. All editor mutations go through EditorCommand."
+
+[dependencies]
+bevy     = { workspace = true }
+nf_core  = { workspace = true }
+nf_scene = { workspace = true }

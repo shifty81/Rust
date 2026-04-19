@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use bevy::pbr::{FogFalloff, FogSettings};
 use rand::Rng;
 use std::f32::consts::PI;
 
@@ -17,6 +18,7 @@ impl Plugin for AtmospherePlugin {
                 (
                     update_world_time,
                     update_sky_color,
+                    update_fog,
                     update_weather,
                     animate_weather_particles,
                 )
@@ -86,6 +88,32 @@ fn lerp_color(a: Color, b: Color, t: f32) -> Color {
         ab + (bb - ab) * t,
         aa + (ba - aa) * t,
     )
+}
+
+fn update_fog(
+    world_time: Res<WorldTime>,
+    weather:    Res<WeatherState>,
+    mut fog_query: Query<&mut FogSettings, With<PlayerCamera>>,
+) {
+    let Ok(mut fog) = fog_query.get_single_mut() else { return };
+
+    let sun_angle = (world_time.day_fraction - 0.25) * 2.0 * PI;
+    let elevation = sun_angle.sin();
+
+    // Fog colour tracks the sky so the horizon blends naturally.
+    let sky = sky_gradient(elevation);
+    let LinearRgba { red, green, blue, .. } = sky.to_linear();
+    fog.color = Color::linear_rgb(red, green, blue);
+
+    // Tighten visibility in bad weather.
+    let (fog_start, fog_end) = match weather.kind {
+        WeatherKind::Storm  => (FOG_START * 0.25, FOG_END * 0.35),
+        WeatherKind::Rain   => (FOG_START * 0.50, FOG_END * 0.60),
+        WeatherKind::Snow   => (FOG_START * 0.55, FOG_END * 0.65),
+        WeatherKind::Cloudy => (FOG_START * 0.80, FOG_END * 0.85),
+        WeatherKind::Clear  => (FOG_START,          FOG_END),
+    };
+    fog.falloff = FogFalloff::Linear { start: fog_start, end: fog_end };
 }
 
 fn update_weather(

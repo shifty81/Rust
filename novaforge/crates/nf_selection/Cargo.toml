@@ -1,0 +1,9 @@
+[package]
+name    = "nf_selection"
+version = "0.1.0"
+edition = "2021"
+description = "Centralised selection state: selected entities, hovered entity, selected asset."
+
+[dependencies]
+bevy    = { workspace = true }
+nf_core = { workspace = true }

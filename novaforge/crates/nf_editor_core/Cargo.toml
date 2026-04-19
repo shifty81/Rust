@@ -1,0 +1,11 @@
+[package]
+name    = "nf_editor_core"
+version = "0.1.0"
+edition = "2021"
+description = "Editor modes, panel contracts, docking layout definitions, and shared editor events."
+
+[dependencies]
+bevy         = { workspace = true }
+nf_core      = { workspace = true }
+nf_selection = { workspace = true }
+nf_commands  = { workspace = true }

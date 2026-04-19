@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy::input::mouse::MouseMotion;
+use bevy::pbr::{FogFalloff, FogSettings};
 use bevy::window::CursorGrabMode;
 
 use crate::components::*;
@@ -49,6 +50,15 @@ fn setup_player(
         Camera3dBundle {
             transform: Transform::from_translation(Vec3::new(0.0, PLAYER_EYE_HEIGHT, 0.0)),
             ..default()
+        },
+        FogSettings {
+            color: Color::srgb(0.35, 0.48, 0.66),
+            directional_light_color: Color::srgba(1.0, 0.95, 0.80, 0.5),
+            directional_light_exponent: 30.0,
+            falloff: FogFalloff::Linear {
+                start: FOG_START,
+                end:   FOG_END,
+            },
         },
         PlayerCamera,
         Name::new("PlayerCamera"),

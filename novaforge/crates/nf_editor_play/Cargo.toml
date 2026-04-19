@@ -1,0 +1,12 @@
+[package]
+name    = "nf_editor_play"
+version = "0.1.0"
+edition = "2021"
+description = "Play-In-Editor and Simulate modes: world serialization, runtime world lifecycle, pause/step."
+
+[dependencies]
+bevy           = { workspace = true }
+nf_core        = { workspace = true }
+nf_game        = { workspace = true }
+nf_scene       = { workspace = true }
+nf_editor_core = { workspace = true }

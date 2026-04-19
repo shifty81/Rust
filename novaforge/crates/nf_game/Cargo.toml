@@ -1,0 +1,10 @@
+[package]
+name    = "nf_game"
+version = "0.1.0"
+edition = "2021"
+description = "Gameplay systems and plugins — the actual game logic, shared between runtime and PIE."
+
+[dependencies]
+bevy     = { workspace = true }
+nf_core  = { workspace = true }
+nf_scene = { workspace = true }

@@ -1,0 +1,13 @@
+[package]
+name    = "nf_prefab"
+version = "0.1.0"
+edition = "2021"
+description = "Reusable prefab definitions, instance override tracking, and prefab spawning."
+
+[dependencies]
+bevy     = { workspace = true }
+serde    = { workspace = true }
+ron      = { workspace = true }
+uuid     = { workspace = true }
+nf_core  = { workspace = true }
+nf_scene = { workspace = true }
