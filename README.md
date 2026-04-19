@@ -1,17 +1,19 @@
-# NovaForge — Rust Voxel Planet Engine & Editor
+# Atlas Engine — Rust Voxel Planet Engine & Editor
 
 A fully procedural **voxel planet engine** written in Rust using [Bevy](https://bevyengine.org/) 0.14,
-packaged as both a standalone first-person game and a full **NovaForge Editor** with
-Play-In-Editor (PIE), world settings, solar-system navigation, and a live outliner.
+built around the **Atlas Editor** — a full egui-based editor with Play-In-Editor (PIE), world settings,
+solar-system navigation, voxel sculpting tools, and a live outliner.
+
+The runtime voxel game is the primary *example scene* shipped inside the editor.
 
 ---
 
-## 📦 Two Modes of Use
+## 📦 Two Entry Points
 
-| Mode | Entry point | What you get |
-|------|-------------|--------------|
-| **Standalone game** | `cargo run` (repo root) | First-person voxel exploration, gravity, sprint, jump |
-| **NovaForge Editor** | `cargo run` inside `novaforge/` | Full editor window, PIE, World Settings, solar-system fly-through |
+| Mode | Command | What you get |
+|------|---------|--------------|
+| **Atlas Editor** | `cargo run -p atlas_editor_app` | Full editor window, PIE, World Settings, solar-system fly-through, voxel tools |
+| **Standalone runtime** | `cargo run -p atlas_runtime_app` | First-person voxel exploration, gravity, sprint, jump — no editor UI |
 
 ---
 
@@ -20,8 +22,9 @@ Play-In-Editor (PIE), world settings, solar-system navigation, and a live outlin
 - **1/128th Earth scale** — radius ≈ 49 773 m; curvature imperceptible while walking
 - **Procedural terrain** — multi-octave FBM Perlin noise projected onto a sphere
 - **Planet overview mesh** — colour-per-vertex UV sphere (180 × 360 segments, ~65 k vertices) visible from orbit
-- **Chunk-based voxel terrain** — 16³ voxel chunks generated dynamically around the camera; only terrain within render-distance is kept in memory
-- **Ocean sphere** — semi-transparent blue sphere at sea level visible from low orbit; gives the planet life from a distance
+- **Chunk-based voxel terrain** — 16³ voxel chunks generated asynchronously; nearest chunks prioritised; only terrain within render-distance is kept in memory
+- **Vertex ambient occlusion** — per-vertex AO baked at mesh time for natural-looking crevice shading with no extra draw calls
+- **Ocean sphere** — semi-transparent blue sphere at sea level visible from low orbit
 
 ### 🌱 Biomes (12 types)
 
@@ -46,10 +49,10 @@ Play-In-Editor (PIE), world settings, solar-system navigation, and a live outlin
 
 - **Sun** — emissive G-type star orbiting the planet on an axially-tilted path (10-minute days)
 - **Moon** — tidally-influenced orbit (~15-minute period)
-- **7 other planets** — Mercury through Neptune, each with its own colour, orbital radius, and period
+- **7 other planets** — Mercury through Neptune analogs, each with its own colour, orbital radius, and period
 - **Axial tilt** ≈ 23.5° — provides seasonal variation in sunlight angle
 - **Dynamic sky** — midnight navy → twilight orange → daytime blue gradient; sun intensity & tint follow the orbit
-- **200 background stars** — emissive spheres distributed by Fibonacci spiral at ≈105 Mm distance; visible colour-coded by stellar type (blue/white/yellow-orange/red)
+- **200 background stars** — colour-coded by stellar type (blue / white / yellow-orange / red)
 
 ---
 
@@ -59,29 +62,23 @@ Play-In-Editor (PIE), world settings, solar-system navigation, and a live outlin
 - **Spherical gravity** — always pulls toward the planet centre
 - **Surface orientation** — the player's local "up" tracks the planet normal anywhere on the globe
 - Jump (Space) and sprint (Shift)
-- Escape toggles mouse-cursor capture
-- **Flight mode** — press **F** to toggle gravity-free 6DoF flight. Walk the surface, then take off into space to explore the solar system:
-  - WASD: fly forward/strafe along look direction
-  - Q/E: fly down/up along camera axis
-  - Shift: boost to 4 000 m/s (quickly reach the moon / sun)
-  - F again: return to walking mode (soft-lands via gravity)
-- **PIE HUD** — position, altitude (m or km), speed (m/s or km/s), flight mode, and controls displayed during Play-In-Editor
+- **Flight mode** — press **F** to toggle gravity-free 6DoF flight; Shift boosts to 4 000 m/s
+- **PIE HUD** — position, altitude, speed, flight mode, and controls overlay during Play-In-Editor
 
 ---
 
 ## 🌤 Atmosphere & Weather
 
 - **Dynamic sky colour** — blended from midnight → dawn → full daylight each day cycle
-- **Altitude-aware atmosphere** — sky and fog blend to black when above 8 km; fully gone by 20 km; in space the background stars are visible and the sun provides clean hard-edge lighting
-- **Directional sunlight** — intensity and warm/cool tint follow the sun's position
-- **Weather system** — Clear, Cloudy, Rain, Snow, Storm; transitions every ~90 s; intensity slider
+- **Altitude-aware atmosphere** — sky and fog blend to black above 8 km; stars visible in space
+- **Weather system** — Clear, Cloudy, Rain, Snow, Storm; transitions every ~90 s
 - **Precipitation particles** — rain/snow/storm fall toward the planet centre relative to the player
 
 ---
 
 ## 🌲 Vegetation
 
-Procedurally placed around the player/camera, despawned when out of range:
+Procedurally placed around the camera, despawned when out of range:
 
 | Species | Biome |
 |---------|-------|
@@ -93,20 +90,19 @@ Procedurally placed around the player/camera, despawned when out of range:
 
 ---
 
-## 🖥️ NovaForge Editor
-
-The editor (`novaforge/`) wraps the voxel engine with a full egui-based editing environment.
+## 🖥️ Atlas Editor
 
 ### Editor Window (Editing mode)
 
 | Panel | Description |
 |-------|-------------|
-| **Viewport** | 3-D free-fly camera over the voxel world |
-| **World Outliner** | Hierarchical list of all scene entities grouped by type |
-| **Details** | Component inspector for the selected entity |
+| **Viewport** | 3-D free-fly camera over the voxel world; gizmos, snapping, grid |
+| **World Outliner** | Hierarchical list of all scene entities grouped by type; multi-select, context menu |
+| **Details** | Component inspector for the selected entity; undo-aware transform drag |
 | **World Settings** | Live-edit terrain seed, render distance, day/night, weather |
-| **Content Browser** | Asset browser (placeholder) |
-| **Output Log** | Runtime log messages |
+| **Voxel Tools** | Palette, brush mode (Place / Remove / Paint), box / sphere brush, undo-able strokes |
+| **Content Browser** | Asset browser panel |
+| **Output Log** | Runtime Bevy log messages forwarded to the editor |
 
 ### Editor Camera Controls
 
@@ -115,105 +111,102 @@ The editor (`novaforge/`) wraps the voxel engine with a full egui-based editing 
 | **RMB + drag** | Look around |
 | **RMB + WASD** | Fly forward / strafe |
 | **RMB + Q / E** | Fly down / up |
-| **Scroll wheel** | Multiply speed ×1.25 per notch (range: 1 m/s – 1 000 000 m/s) |
-| **Home** | Teleport to solar-system overview (~12 Gm out) |
-| **End** | Teleport to planet-surface overview (~3 km up) |
-| **W / E / R** | Switch gizmo to Translate / Rotate / Scale |
+| **Scroll wheel** | Multiply speed ×1.25 per notch (1 m/s – 1 000 000 m/s) |
+| **Home** | Teleport to solar-system overview |
+| **End** | Teleport to planet-surface overview (3 km up) |
+| **W / E / R** | Switch gizmo: Translate / Rotate / Scale |
 | **G** | Toggle world-grid overlay |
+| **Ctrl+Z / Ctrl+Y** | Undo / Redo |
+| **Delete** | Delete selected entity |
+| **Ctrl+D** | Duplicate selected entity |
 
 ### Play-In-Editor (PIE)
 
-Press **▶ Play** in the menu bar (or via **View → ▶ Play**) to enter PIE:
+Press **▶ Play** in the menu bar to enter PIE:
 
-1. The voxel player is spawned above the north pole.
-2. The player camera takes over; the editor camera is deactivated.
-3. A **PIE HUD** overlays FPS, player position, altitude, speed (m/s or km/s), and flight mode.
-4. Press **F** to enter flight mode — explore the solar system freely.
-5. Press **⏹ Stop** to return to Editing mode; the player entity is despawned.
+1. The voxel player spawns above the north pole.
+2. The player camera takes over; the editor camera deactivates.
+3. A **PIE HUD** overlays position, altitude, speed, and flight mode.
+4. Press **⏹ Stop** to return to Editing mode.
 
-| Key | PIE Action |
-|-----|-----------|
-| WASD / Arrows | Walk / fly forward, back, strafe |
-| Shift | Sprint (walking) / boost speed ×10 (flying) |
-| Space | Jump (walking only) |
-| F | Toggle flight / walking mode |
-| Q / E | Fly down / up (flight mode only) |
-| Esc | Release / capture mouse cursor |
+### Scene & World I/O
 
-### View Menu — Navigation Shortcuts
-
-| Menu item | Keyboard | Effect |
-|-----------|----------|--------|
-| 🌌 Solar System Overview | `Home` | Fly to a vantage point showing all planets |
-| 🌍 Planet Surface Overview | `End` | Fly to 3 km above the planet's north pole |
-
-### World Settings Panel
-
-- **Terrain** — change the noise seed and press *Regenerate World* to rebuild all chunks
-- **Chunks** — adjust render distance (1–20 chunks) and max chunks generated per frame (1–32)
-- **Day / Night** — scrub the day-fraction slider in real-time; see axial tilt and day-length constants
-- **Weather** — switch weather kind and intensity live
-- **Vegetation** — read-only spawn probability and radius constants
-- **Player** — read-only walk/run/jump speed, gravity, eye height, and fog distances
+- **File → Save / Open / New** — RON-serialised `.atlasscene` format
+- **File → Save / Load World Data** — binary `.voxelworld` format (manually-edited chunks only)
+- **Dirty indicator** — `●` in title bar when unsaved changes exist
 
 ---
 
 ## 🔧 Building & Running
 
-**Requirements:** Rust ≥ 1.65 (tested with 1.94.1), Linux: `libasound2-dev libudev-dev`.
+**Requirements:** Rust stable (≥ 1.76 recommended), Linux: `sudo apt install libasound2-dev libudev-dev`.
 
 ```bash
-# ── Standalone game (repo root) ──────────────────────────────────
-cargo run          # debug
-cargo run --release  # release (recommended for exploration)
+# Clone
+git clone https://github.com/shifty81/Rust atlas-engine
+cd atlas-engine
 
-# ── NovaForge Editor ────────────────────────────────────────────
-cd novaforge
-cargo run          # debug editor
-cargo run --release  # release editor
+# Atlas Editor (recommended — runs the full engine inside the editor)
+cargo run -p atlas_editor_app
+
+# Atlas Editor — optimised release build
+cargo run -p atlas_editor_app --release
+
+# Standalone runtime only (no editor)
+cargo run -p atlas_runtime_app --release
 ```
 
 > **First build:** downloads ~500 Bevy crates — takes several minutes.
-> Subsequent incremental builds are fast.
+> Subsequent incremental builds are fast (seconds).
 
 ---
 
 ## 🗂 Architecture
 
 ```
-src/                        ← Standalone game
-├── main.rs                 — App entry point; adds all plugins
-├── config.rs               — Tunable constants (planet size, orbital periods, …)
-├── components.rs           — ECS components and resources
-├── biome.rs                — Biome classification, voxel selection, surface colours
-├── solar_system.rs         — SolarSystemPlugin: sun, moon, planets, orbital mechanics
-├── planet.rs               — PlanetPlugin: overview sphere mesh + voxel chunk manager
-├── player.rs               — PlayerPlugin: character controller, spherical gravity, camera
-├── atmosphere.rs           — AtmospherePlugin: day/night sky, weather, precipitation
-└── vegetation.rs           — VegetationPlugin: procedural tree/cactus spawning
+crates/
+├── atlas_editor_app/           — Editor executable (main entry point)
+├── atlas_runtime_app/          — Standalone runtime executable
+│
+├── atlas_voxel_planet/         — Core voxel planet engine
+│   ├── src/planet.rs           —   Async chunk generation, AO mesher, noise cache
+│   ├── src/biome.rs            —   Biome classification, voxel palette, surface colours
+│   ├── src/solar_system.rs     —   Sun, moon, planets, orbital mechanics
+│   ├── src/player.rs           —   First-person controller, spherical gravity
+│   ├── src/atmosphere.rs       —   Day/night sky, weather, precipitation
+│   ├── src/vegetation.rs       —   Procedural tree / grass spawning
+│   ├── src/world_io.rs         —   Binary .voxelworld save / load
+│   └── src/config.rs           —   All tunable constants
+│
+├── atlas_editor_core/          — EditorMode state machine, EditorCamera marker
+├── atlas_editor_ui/            — Menu bar, snap toolbar, keyboard shortcuts
+├── atlas_editor_viewport/      — Free-fly editor camera, viewport picking
+├── atlas_editor_play/          — PIE lifecycle + in-game HUD overlay
+├── atlas_editor_outliner/      — World Outliner panel
+├── atlas_editor_details/       — Details / component inspector panel
+├── atlas_editor_world_settings/— World Settings floating panel
+├── atlas_editor_scene/         — New / Open / Save .atlasscene events
+├── atlas_editor_voxel_tools/   — Voxel palette, brush, DDA ray-cast editing
+├── atlas_editor_content/       — Content Browser panel
+├── atlas_editor_log/           — Output Log panel (Bevy → egui bridge)
+├── atlas_editor_project/       — Project panel
+│
+├── atlas_commands/             — Undo / Redo command history
+├── atlas_gizmos/               — Translate / Rotate / Scale gizmos + grid + snap
+├── atlas_selection/            — FocusedEntity resource + SelectionChanged event
+├── atlas_scene/                — Scene file format + dirty tracking
+├── atlas_prefab/               — Prefab file format + instance overrides
+├── atlas_assets/               — Asset registry and metadata
+├── atlas_core/                 — StableId, TransformData, Tag (no Bevy dep)
+├── atlas_game/                 — Gameplay systems (Player, Health, GamePlugin)
+└── atlas_render/               — Render setup helpers
 
-novaforge/                  ← NovaForge Editor workspace
-└── crates/
-    ├── nf_voxel_planet/    — Re-packaged voxel engine (planet, solar system, player, …)
-    ├── nf_editor_app/      — Editor executable (main.rs)
-    ├── nf_editor_core/     — EditorMode state machine, EditorCamera marker
-    ├── nf_editor_ui/       — Menu bar, toolbar, View menu (Home/End shortcuts)
-    ├── nf_editor_viewport/ — Free-fly editor camera + viewport HUD
-    ├── nf_editor_play/     — PIE lifecycle + in-game HUD overlay
-    ├── nf_editor_outliner/ — World Outliner panel
-    ├── nf_editor_details/  — Details / component inspector panel
-    ├── nf_editor_world_settings/ — World Settings floating panel
-    ├── nf_editor_scene/    — New / Open / Save scene events
-    ├── nf_editor_content/  — Content Browser panel
-    ├── nf_editor_log/      — Output Log panel
-    ├── nf_editor_project/  — Project panel
-    ├── nf_commands/        — Undo/Redo command history
-    ├── nf_gizmos/          — Translate/Rotate/Scale gizmos + grid toggle
-    ├── nf_selection/       — FocusedEntity resource + SelectionChanged event
-    ├── nf_assets/          — Asset loading helpers
-    ├── nf_scene/           — Scene serialisation stubs
-    ├── nf_prefab/          — Prefab stubs
-    └── nf_render/          — Render helpers
+project/                        — Editor project directory (scenes, prefabs, content)
+├── Scenes/
+├── Prefabs/
+├── Content/
+├── Config/
+└── Cache/
 ```
 
 ---
@@ -223,8 +216,9 @@ novaforge/                  ← NovaForge Editor workspace
 - Wildlife AI and ecosystem simulation
 - Water physics (rivers, oceans with waves)
 - Caves and underground biomes
-- Space flight / inter-planetary travel (fly from the planet to the sun or other planets)
+- Space flight / inter-planetary travel
 - Inventory and building system
 - Multiplayer
 - Third-person character model with animations
 - Procedural city / structure generation
+- Greedy meshing to further reduce chunk triangle count

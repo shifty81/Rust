@@ -1,0 +1,13 @@
+[package]
+name    = "atlas_editor_play"
+version = "0.1.0"
+edition = "2021"
+description = "Play-In-Editor and Simulate modes: world serialization, runtime world lifecycle, pause/step."
+
+[dependencies]
+bevy           = { workspace = true }
+bevy_egui      = { workspace = true }
+atlas_core        = { workspace = true }
+atlas_scene       = { workspace = true }
+atlas_editor_core = { workspace = true }
+atlas_voxel_planet = { workspace = true }

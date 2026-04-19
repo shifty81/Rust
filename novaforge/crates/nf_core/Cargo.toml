@@ -1,9 +1,0 @@
-[package]
-name    = "nf_core"
-version = "0.1.0"
-edition = "2021"
-description = "Shared core types, stable IDs, math helpers, and tags used by every NovaForge crate."
-
-[dependencies]
-serde = { workspace = true }
-uuid  = { workspace = true }

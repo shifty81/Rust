@@ -1,0 +1,19 @@
+[package]
+name    = "atlas_editor_ui"
+version = "0.1.0"
+edition = "2021"
+description = "egui-based editor shell: main menu bar, toolbar, docking layout, and panel rendering."
+
+[dependencies]
+bevy              = { workspace = true }
+bevy_egui         = { workspace = true }
+atlas_core           = { workspace = true }
+atlas_editor_core    = { workspace = true }
+atlas_editor_scene   = { workspace = true }
+atlas_editor_play    = { workspace = true }
+atlas_editor_viewport = { workspace = true }
+atlas_commands       = { workspace = true }
+atlas_voxel_planet   = { workspace = true }
+atlas_gizmos         = { workspace = true }
+atlas_selection      = { workspace = true }
+atlas_scene          = { workspace = true }

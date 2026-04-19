@@ -1,0 +1,13 @@
+[package]
+name    = "atlas_prefab"
+version = "0.1.0"
+edition = "2021"
+description = "Reusable prefab definitions, instance override tracking, and prefab spawning."
+
+[dependencies]
+bevy     = { workspace = true }
+serde    = { workspace = true }
+ron      = { workspace = true }
+uuid     = { workspace = true }
+atlas_core  = { workspace = true }
+atlas_scene = { workspace = true }

@@ -1,22 +1,74 @@
-[package]
-name = "voxel-planet"
-version = "0.1.0"
-edition = "2021"
-description = "A voxel planet engine: 1/128 Earth-scale planet with solar system, biomes, weather, and character controller"
+[workspace]
+resolver = "2"
+members = [
+    "crates/atlas_core",
+    "crates/atlas_game",
+    "crates/atlas_render",
+    "crates/atlas_assets",
+    "crates/atlas_scene",
+    "crates/atlas_prefab",
+    "crates/atlas_commands",
+    "crates/atlas_gizmos",
+    "crates/atlas_selection",
+    "crates/atlas_voxel_planet",
+    "crates/atlas_editor_core",
+    "crates/atlas_editor_ui",
+    "crates/atlas_editor_viewport",
+    "crates/atlas_editor_outliner",
+    "crates/atlas_editor_details",
+    "crates/atlas_editor_content",
+    "crates/atlas_editor_scene",
+    "crates/atlas_editor_play",
+    "crates/atlas_editor_log",
+    "crates/atlas_editor_project",
+    "crates/atlas_editor_world_settings",
+    "crates/atlas_editor_voxel_tools",
+    "crates/atlas_runtime_app",
+    "crates/atlas_editor_app",
+]
 
-[[bin]]
-name = "voxel-planet"
-path = "src/main.rs"
+# ────────────────────────────────────────────────────────────
+# Shared dependency versions pinned once for the entire workspace.
+# Individual crates opt-in with `{ workspace = true }`.
+# ────────────────────────────────────────────────────────────
+[workspace.dependencies]
+bevy        = { version = "0.14" }
+# bevy_egui 0.28.x targets bevy 0.14
+bevy_egui   = { version = "0.28", default-features = false, features = ["default_fonts"] }
+serde       = { version = "1",    features = ["derive"] }
+ron         = "0.8"
+uuid        = { version = "1",    features = ["v4", "serde"] }
+noise       = "0.9"
+rand        = "0.8"
 
-[dependencies]
-bevy = { version = "0.14", features = ["dynamic_linking"] }
-noise = "0.9"
-rand = "0.8"
+# Workspace-internal crates
+atlas_core              = { path = "crates/atlas_core" }
+atlas_game              = { path = "crates/atlas_game" }
+atlas_render            = { path = "crates/atlas_render" }
+atlas_assets            = { path = "crates/atlas_assets" }
+atlas_scene             = { path = "crates/atlas_scene" }
+atlas_prefab            = { path = "crates/atlas_prefab" }
+atlas_commands          = { path = "crates/atlas_commands" }
+atlas_gizmos            = { path = "crates/atlas_gizmos" }
+atlas_selection         = { path = "crates/atlas_selection" }
+atlas_voxel_planet      = { path = "crates/atlas_voxel_planet" }
+atlas_editor_core       = { path = "crates/atlas_editor_core" }
+atlas_editor_ui         = { path = "crates/atlas_editor_ui" }
+atlas_editor_viewport   = { path = "crates/atlas_editor_viewport" }
+atlas_editor_outliner   = { path = "crates/atlas_editor_outliner" }
+atlas_editor_details    = { path = "crates/atlas_editor_details" }
+atlas_editor_content    = { path = "crates/atlas_editor_content" }
+atlas_editor_scene      = { path = "crates/atlas_editor_scene" }
+atlas_editor_play       = { path = "crates/atlas_editor_play" }
+atlas_editor_log        = { path = "crates/atlas_editor_log" }
+atlas_editor_project    = { path = "crates/atlas_editor_project" }
+atlas_editor_world_settings = { path = "crates/atlas_editor_world_settings" }
+atlas_editor_voxel_tools    = { path = "crates/atlas_editor_voxel_tools" }
 
 [profile.dev]
 opt-level = 1
 
 [profile.release]
-opt-level = 3
-lto = "thin"
+opt-level     = 3
+lto           = "thin"
 codegen-units = 1

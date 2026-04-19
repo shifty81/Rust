@@ -1,9 +1,0 @@
-[package]
-name    = "nf_render"
-version = "0.1.0"
-edition = "2021"
-description = "Render setup, pipelines, and game-view configuration."
-
-[dependencies]
-bevy    = { workspace = true }
-nf_core = { workspace = true }

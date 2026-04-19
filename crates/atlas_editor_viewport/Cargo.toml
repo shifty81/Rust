@@ -1,0 +1,14 @@
+[package]
+name    = "atlas_editor_viewport"
+version = "0.1.0"
+edition = "2021"
+description = "Viewport window: editor camera, overlays, object picking, and drop targets."
+
+[dependencies]
+bevy              = { workspace = true }
+bevy_egui         = { workspace = true }
+atlas_core           = { workspace = true }
+atlas_editor_core    = { workspace = true }
+atlas_gizmos         = { workspace = true }
+atlas_selection      = { workspace = true }
+atlas_voxel_planet   = { workspace = true }

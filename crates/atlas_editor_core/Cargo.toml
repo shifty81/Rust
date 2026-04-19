@@ -1,0 +1,11 @@
+[package]
+name    = "atlas_editor_core"
+version = "0.1.0"
+edition = "2021"
+description = "Editor modes, panel contracts, docking layout definitions, and shared editor events."
+
+[dependencies]
+bevy         = { workspace = true }
+atlas_core      = { workspace = true }
+atlas_selection = { workspace = true }
+atlas_commands  = { workspace = true }

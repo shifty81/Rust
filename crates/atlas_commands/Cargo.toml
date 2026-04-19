@@ -1,0 +1,10 @@
+[package]
+name    = "atlas_commands"
+version = "0.1.0"
+edition = "2021"
+description = "Command-based undo/redo system. All editor mutations go through EditorCommand."
+
+[dependencies]
+bevy     = { workspace = true }
+atlas_core  = { workspace = true }
+atlas_scene = { workspace = true }

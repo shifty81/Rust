@@ -1,0 +1,13 @@
+[package]
+name    = "atlas_editor_project"
+version = "0.1.0"
+edition = "2021"
+description = "Project loading, settings, content root paths, and project-level configuration."
+
+[dependencies]
+bevy           = { workspace = true }
+serde          = { workspace = true }
+ron            = { workspace = true }
+atlas_core        = { workspace = true }
+atlas_assets      = { workspace = true }
+atlas_editor_core = { workspace = true }
