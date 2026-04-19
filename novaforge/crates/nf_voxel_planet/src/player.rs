@@ -108,6 +108,49 @@ pub fn handle_movement(
 ) {
     let Ok((transform, mut state)) = player_q.get_single_mut() else { return };
 
+    // ── Toggle flight mode (F key) ───────────────────────────────────────────
+    if keyboard.just_pressed(KeyCode::KeyF) {
+        state.is_flying = !state.is_flying;
+        if !state.is_flying {
+            // Cancel vertical velocity when landing back to walk mode.
+            state.velocity = Vec3::ZERO;
+            state.is_grounded = false;
+        }
+    }
+
+    if state.is_flying {
+        // ── Free-fly / space-flight mode ─────────────────────────────────────
+        let speed = if keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight) {
+            PLAYER_FLY_RUN_SPEED
+        } else {
+            PLAYER_FLY_SPEED
+        };
+
+        // Build look direction from player's own yaw + pitch.
+        let look = Quat::from_euler(EulerRot::YXZ, state.yaw, state.pitch, 0.0);
+        let fwd   = look * Vec3::NEG_Z;
+        let right = look * Vec3::X;
+        let up    = look * Vec3::Y;
+
+        let mut move_dir = Vec3::ZERO;
+        if keyboard.pressed(KeyCode::KeyW) || keyboard.pressed(KeyCode::ArrowUp)    { move_dir += fwd;   }
+        if keyboard.pressed(KeyCode::KeyS) || keyboard.pressed(KeyCode::ArrowDown)  { move_dir -= fwd;   }
+        if keyboard.pressed(KeyCode::KeyA) || keyboard.pressed(KeyCode::ArrowLeft)  { move_dir -= right; }
+        if keyboard.pressed(KeyCode::KeyD) || keyboard.pressed(KeyCode::ArrowRight) { move_dir += right; }
+        if keyboard.pressed(KeyCode::KeyE) { move_dir += up;  }
+        if keyboard.pressed(KeyCode::KeyQ) { move_dir -= up;  }
+
+        if move_dir.length_squared() > 0.0 {
+            state.velocity = move_dir.normalize() * speed;
+        } else {
+            // Dampen residual velocity.
+            state.velocity *= (1.0 - 5.0 * time.delta_seconds()).max(0.0);
+        }
+
+        return;
+    }
+
+    // ── Walking mode ─────────────────────────────────────────────────────────
     let speed = if keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight) {
         PLAYER_RUN_SPEED
     } else {
@@ -152,6 +195,12 @@ pub fn apply_gravity(
 ) {
     let Ok((mut transform, mut state)) = player_q.get_single_mut() else { return };
 
+    // No gravity in flight mode.
+    if state.is_flying {
+        transform.translation += state.velocity * time.delta_seconds();
+        return;
+    }
+
     let pos  = transform.translation;
     let dist = pos.length();
     if dist < 1.0 { return; }
@@ -190,6 +239,13 @@ pub fn align_to_surface(
     mut player_q: Query<(&mut Transform, &PlayerState), With<Player>>,
 ) {
     let Ok((mut transform, state)) = player_q.get_single_mut() else { return };
+
+    if state.is_flying {
+        // In flight mode: rotate freely by world-space yaw only; pitch is applied
+        // on the camera child so the player body just faces the flight direction.
+        transform.rotation = Quat::from_euler(EulerRot::YXZ, state.yaw, 0.0, 0.0);
+        return;
+    }
 
     let local_up = transform.translation.normalize_or_zero();
     if local_up.length_squared() < 0.5 { return; }

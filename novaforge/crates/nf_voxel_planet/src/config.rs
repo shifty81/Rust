@@ -104,6 +104,12 @@ pub const MAX_PITCH: f32 = 1.5;
 /// Small clearance (metres) between the player's feet and the terrain surface.
 pub const PLAYER_FOOT_CLEARANCE: f32 = 0.05;
 
+/// Flight speed in free-fly mode (m/s).
+pub const PLAYER_FLY_SPEED: f32 = 400.0;
+
+/// Sprint flight speed in free-fly mode (m/s).
+pub const PLAYER_FLY_RUN_SPEED: f32 = 4_000.0;
+
 // ============================================================
 //  ATMOSPHERE / WEATHER
 // ============================================================
@@ -119,6 +125,12 @@ pub const WEATHER_CHANGE_INTERVAL: f32 = 90.0;
 
 /// Maximum number of precipitation particles active at once.
 pub const MAX_WEATHER_PARTICLES: usize = 600;
+
+/// Altitude above sea level (metres) at which the atmosphere begins to fade.
+pub const ATMOSPHERE_FADE_START: f32 = 8_000.0;
+
+/// Altitude above sea level (metres) at which the atmosphere is fully gone.
+pub const ATMOSPHERE_HEIGHT: f32 = 20_000.0;
 
 // ============================================================
 //  VEGETATION

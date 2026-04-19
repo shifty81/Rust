@@ -118,9 +118,12 @@ fn draw_pie_hud(
 
             ui.separator();
             ui.label(
-                egui::RichText::new("Esc: release cursor · Shift: sprint · Space: jump")
-                    .weak()
-                    .small(),
+                egui::RichText::new(
+                    "Esc: release cursor · Shift: sprint · Space: jump · F: toggle flight  |  \
+                     Flying: WASD/QE: 6DoF · Shift: fast"
+                )
+                .weak()
+                .small(),
             );
         });
     });
@@ -131,7 +134,8 @@ fn draw_pie_hud(
         let dist   = pos.length();
         let alt_m  = dist - PLANET_RADIUS;
         let speed  = state.velocity.length();
-        let ground = if state.is_grounded { "grounded" } else { "airborne" };
+
+        let mode_str = if state.is_flying { "✈  Flying" } else if state.is_grounded { "grounded" } else { "airborne" };
 
         egui::Window::new("Player")
             .title_bar(false)
@@ -148,19 +152,36 @@ fn draw_pie_hud(
                         ui.end_row();
 
                         ui.label(egui::RichText::new("Altitude").weak());
-                        ui.label(format!(
-                            "{}{:.1} m",
-                            if alt_m < 0.0 { "-" } else { "+" },
-                            alt_m.abs()
-                        ));
+                        if alt_m.abs() >= 1_000.0 {
+                            ui.label(format!(
+                                "{}{:.2} km",
+                                if alt_m < 0.0 { "-" } else { "+" },
+                                alt_m.abs() / 1_000.0
+                            ));
+                        } else {
+                            ui.label(format!(
+                                "{}{:.1} m",
+                                if alt_m < 0.0 { "-" } else { "+" },
+                                alt_m.abs()
+                            ));
+                        }
                         ui.end_row();
 
                         ui.label(egui::RichText::new("Speed").weak());
-                        ui.label(format!("{speed:.1} m/s"));
+                        if speed >= 1_000.0 {
+                            ui.label(format!("{:.2} km/s", speed / 1_000.0));
+                        } else {
+                            ui.label(format!("{speed:.1} m/s"));
+                        }
                         ui.end_row();
 
-                        ui.label(egui::RichText::new("State").weak());
-                        ui.label(ground);
+                        ui.label(egui::RichText::new("Mode").weak());
+                        let mode_color = if state.is_flying {
+                            egui::Color32::from_rgb(100, 180, 255)
+                        } else {
+                            egui::Color32::GRAY
+                        };
+                        ui.label(egui::RichText::new(mode_str).color(mode_color));
                         ui.end_row();
                     });
             });

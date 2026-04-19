@@ -21,6 +21,7 @@ Play-In-Editor (PIE), world settings, solar-system navigation, and a live outlin
 - **Procedural terrain** — multi-octave FBM Perlin noise projected onto a sphere
 - **Planet overview mesh** — colour-per-vertex UV sphere (180 × 360 segments, ~65 k vertices) visible from orbit
 - **Chunk-based voxel terrain** — 16³ voxel chunks generated dynamically around the camera; only terrain within render-distance is kept in memory
+- **Ocean sphere** — semi-transparent blue sphere at sea level visible from low orbit; gives the planet life from a distance
 
 ### 🌱 Biomes (12 types)
 
@@ -48,6 +49,7 @@ Play-In-Editor (PIE), world settings, solar-system navigation, and a live outlin
 - **7 other planets** — Mercury through Neptune, each with its own colour, orbital radius, and period
 - **Axial tilt** ≈ 23.5° — provides seasonal variation in sunlight angle
 - **Dynamic sky** — midnight navy → twilight orange → daytime blue gradient; sun intensity & tint follow the orbit
+- **200 background stars** — emissive spheres distributed by Fibonacci spiral at ≈105 Mm distance; visible colour-coded by stellar type (blue/white/yellow-orange/red)
 
 ---
 
@@ -58,13 +60,19 @@ Play-In-Editor (PIE), world settings, solar-system navigation, and a live outlin
 - **Surface orientation** — the player's local "up" tracks the planet normal anywhere on the globe
 - Jump (Space) and sprint (Shift)
 - Escape toggles mouse-cursor capture
-- **PIE HUD** — position, altitude above sea level, speed, and grounded state displayed during Play-In-Editor
+- **Flight mode** — press **F** to toggle gravity-free 6DoF flight. Walk the surface, then take off into space to explore the solar system:
+  - WASD: fly forward/strafe along look direction
+  - Q/E: fly down/up along camera axis
+  - Shift: boost to 4 000 m/s (quickly reach the moon / sun)
+  - F again: return to walking mode (soft-lands via gravity)
+- **PIE HUD** — position, altitude (m or km), speed (m/s or km/s), flight mode, and controls displayed during Play-In-Editor
 
 ---
 
 ## 🌤 Atmosphere & Weather
 
 - **Dynamic sky colour** — blended from midnight → dawn → full daylight each day cycle
+- **Altitude-aware atmosphere** — sky and fog blend to black when above 8 km; fully gone by 20 km; in space the background stars are visible and the sun provides clean hard-edge lighting
 - **Directional sunlight** — intensity and warm/cool tint follow the sun's position
 - **Weather system** — Clear, Cloudy, Rain, Snow, Storm; transitions every ~90 s; intensity slider
 - **Precipitation particles** — rain/snow/storm fall toward the planet centre relative to the player
@@ -119,8 +127,18 @@ Press **▶ Play** in the menu bar (or via **View → ▶ Play**) to enter PIE:
 
 1. The voxel player is spawned above the north pole.
 2. The player camera takes over; the editor camera is deactivated.
-3. A **PIE HUD** overlays FPS, player position, altitude, speed, and grounded state.
-4. Press **⏹ Stop** to return to Editing mode; the player entity is despawned.
+3. A **PIE HUD** overlays FPS, player position, altitude, speed (m/s or km/s), and flight mode.
+4. Press **F** to enter flight mode — explore the solar system freely.
+5. Press **⏹ Stop** to return to Editing mode; the player entity is despawned.
+
+| Key | PIE Action |
+|-----|-----------|
+| WASD / Arrows | Walk / fly forward, back, strafe |
+| Shift | Sprint (walking) / boost speed ×10 (flying) |
+| Space | Jump (walking only) |
+| F | Toggle flight / walking mode |
+| Q / E | Fly down / up (flight mode only) |
+| Esc | Release / capture mouse cursor |
 
 ### View Menu — Navigation Shortcuts
 
