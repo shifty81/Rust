@@ -2,8 +2,8 @@
 
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts};
-use nf_editor_core::EditorMode;
-use nf_selection::SelectionState;
+use nf_editor_core::{EditorMode, EntityLabel};
+use nf_selection::FocusedEntity;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Component descriptor (reflection bridge)
@@ -55,10 +55,12 @@ impl Plugin for EditorDetailsPlugin {
 // ────────────────────────────────────────────────────────────────────────────
 
 fn draw_details_panel(
-    mut contexts: EguiContexts,
-    selection:    Res<SelectionState>,
-    registry:     Res<DetailsRegistry>,
-    mode:         Res<State<EditorMode>>,
+    mut contexts:  EguiContexts,
+    focused:       Res<FocusedEntity>,
+    registry:      Res<DetailsRegistry>,
+    mut labels:    Query<&mut EntityLabel>,
+    mut transforms: Query<&mut Transform>,
+    mode:          Res<State<EditorMode>>,
 ) {
     if *mode.get() != EditorMode::Editing {
         return;
@@ -72,23 +74,73 @@ fn draw_details_panel(
             ui.heading("Details");
             ui.separator();
 
-            if selection.selected_entities.is_empty() {
+            let Some(entity) = focused.0 else {
                 ui.label("Nothing selected.");
                 return;
-            }
+            };
 
-            let count = selection.selected_entities.len();
-            if count > 1 {
-                ui.label(format!("{count} entities selected."));
-                return;
+            // ── Entity name ──────────────────────────────────────────────
+            ui.label(format!("Entity: {entity:?}"));
+            if let Ok(mut lbl) = labels.get_mut(entity) {
+                ui.horizontal(|ui| {
+                    ui.label("Name:");
+                    ui.text_edit_singleline(&mut lbl.0);
+                });
             }
-
-            // Single-entity view
-            let id = &selection.selected_entities[0];
-            ui.label(format!("Entity: {id}"));
             ui.separator();
 
-            // Render descriptor-driven component fields
+            // ── Transform ────────────────────────────────────────────────
+            if let Ok(mut tf) = transforms.get_mut(entity) {
+                egui::CollapsingHeader::new("Transform")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        egui::Grid::new("tf_grid")
+                            .num_columns(4)
+                            .spacing([4.0, 4.0])
+                            .show(ui, |ui| {
+                                ui.label("Translation");
+                                ui.add(egui::DragValue::new(&mut tf.translation.x).speed(0.1).prefix("X: "));
+                                ui.add(egui::DragValue::new(&mut tf.translation.y).speed(0.1).prefix("Y: "));
+                                ui.add(egui::DragValue::new(&mut tf.translation.z).speed(0.1).prefix("Z: "));
+                                ui.end_row();
+
+                                // Euler angles (degrees) for user friendliness.
+                                // Note: round-tripping quaternion→Euler→quaternion every frame
+                                // can exhibit gimbal lock at ±90° pitch.  A cached Euler
+                                // resource will be added in Phase 3.
+                                let (mut yaw, mut pitch, mut roll) = tf.rotation.to_euler(EulerRot::YXZ);
+                                yaw   = yaw.to_degrees();
+                                pitch = pitch.to_degrees();
+                                roll  = roll.to_degrees();
+
+                                let prev = (yaw, pitch, roll);
+
+                                ui.label("Rotation");
+                                ui.add(egui::DragValue::new(&mut yaw).speed(1.0).suffix("°").prefix("Y: "));
+                                ui.add(egui::DragValue::new(&mut pitch).speed(1.0).suffix("°").prefix("X: "));
+                                ui.add(egui::DragValue::new(&mut roll).speed(1.0).suffix("°").prefix("Z: "));
+                                ui.end_row();
+
+                                if (yaw, pitch, roll) != prev {
+                                    tf.rotation = Quat::from_euler(
+                                        EulerRot::YXZ,
+                                        yaw.to_radians(),
+                                        pitch.to_radians(),
+                                        roll.to_radians(),
+                                    );
+                                }
+
+                                ui.label("Scale");
+                                ui.add(egui::DragValue::new(&mut tf.scale.x).speed(0.01).prefix("X: "));
+                                ui.add(egui::DragValue::new(&mut tf.scale.y).speed(0.01).prefix("Y: "));
+                                ui.add(egui::DragValue::new(&mut tf.scale.z).speed(0.01).prefix("Z: "));
+                                ui.end_row();
+                            });
+                    });
+                ui.separator();
+            }
+
+            // ── Registered component descriptors ─────────────────────────
             for desc in &registry.descriptors {
                 egui::CollapsingHeader::new(desc.type_name)
                     .default_open(true)
@@ -114,7 +166,7 @@ fn draw_details_panel(
 
             ui.separator();
             if ui.button("+ Add Component").clicked() {
-                // Component-picker popup will be added in Phase 2.
+                // Component-picker popup will be added in Phase 3.
             }
         });
 }

@@ -3,6 +3,15 @@
 use bevy::prelude::*;
 
 // ────────────────────────────────────────────────────────────────────────────
+// Shared entity metadata
+// ────────────────────────────────────────────────────────────────────────────
+
+/// Display name shown in the outliner and details panel for an entity.
+/// Add this component to any entity that should be visible and named in the editor.
+#[derive(Component, Default, Clone)]
+pub struct EntityLabel(pub String);
+
+// ────────────────────────────────────────────────────────────────────────────
 // Editor mode state machine
 // ────────────────────────────────────────────────────────────────────────────
 

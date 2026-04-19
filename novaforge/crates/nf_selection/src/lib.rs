@@ -74,6 +74,16 @@ impl SelectionState {
 pub struct SelectionChanged;
 
 // ────────────────────────────────────────────────────────────────────────────
+// Focused entity (editor-only, separate from stable-ID selection)
+// ────────────────────────────────────────────────────────────────────────────
+
+/// The single Bevy entity currently focused in the editor viewport or outliner.
+/// Read by the Details panel to inspect and edit components on the selected entity.
+/// Distinct from [`SelectionState`], which uses stable UUIDs for serialisation.
+#[derive(Resource, Default, Debug)]
+pub struct FocusedEntity(pub Option<Entity>);
+
+// ────────────────────────────────────────────────────────────────────────────
 // Plugin
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -83,6 +93,7 @@ impl Plugin for SelectionPlugin {
     fn build(&self, app: &mut App) {
         app
             .init_resource::<SelectionState>()
+            .init_resource::<FocusedEntity>()
             .add_event::<SelectionChanged>();
     }
 }

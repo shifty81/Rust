@@ -2883,8 +2883,11 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy_egui",
+ "nf_commands",
  "nf_core",
  "nf_editor_core",
+ "nf_editor_play",
+ "nf_editor_scene",
 ]
 
 [[package]]

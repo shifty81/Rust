@@ -3,10 +3,14 @@
 use bevy::prelude::*;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use nf_editor_core::{EditorMode, RequestEditorMode};
+use nf_editor_scene::{NewSceneRequest, OpenSceneRequest, SaveSceneRequest};
+use nf_editor_play::{StartPie, StopPie, PausePie};
+use nf_commands::{UndoRequested, RedoRequested, CommandHistory};
 
-// ────────────────────────────────────────────────────────────────────────────
-// Plugin
-// ────────────────────────────────────────────────────────────────────────────
+/// Placeholder path used when no file dialog is available yet.
+const OPEN_SCENE_PLACEHOLDER: &str = "project/Scenes/untitled.nfscene";
+
+
 
 pub struct EditorUiPlugin;
 
@@ -15,7 +19,28 @@ impl Plugin for EditorUiPlugin {
         if !app.is_plugin_added::<EguiPlugin>() {
             app.add_plugins(EguiPlugin);
         }
-        app.add_systems(Update, draw_menu_bar);
+        app.add_systems(Update, (keyboard_shortcuts, draw_menu_bar).chain());
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Keyboard shortcuts
+// ────────────────────────────────────────────────────────────────────────────
+
+fn keyboard_shortcuts(
+    keys:       Res<ButtonInput<KeyCode>>,
+    mut undo_ev: EventWriter<UndoRequested>,
+    mut redo_ev: EventWriter<RedoRequested>,
+) {
+    let ctrl = keys.any_pressed([KeyCode::ControlLeft, KeyCode::ControlRight]);
+    let shift = keys.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
+
+    if ctrl && !shift && keys.just_pressed(KeyCode::KeyZ) {
+        undo_ev.send(UndoRequested);
+    }
+    // Ctrl+Y or Ctrl+Shift+Z for redo
+    if ctrl && (keys.just_pressed(KeyCode::KeyY) || (shift && keys.just_pressed(KeyCode::KeyZ))) {
+        redo_ev.send(RedoRequested);
     }
 }
 
@@ -24,33 +49,77 @@ impl Plugin for EditorUiPlugin {
 // ────────────────────────────────────────────────────────────────────────────
 
 fn draw_menu_bar(
-    mut contexts: EguiContexts,
-    mut mode_ev:  EventWriter<RequestEditorMode>,
-    mode:         Res<State<EditorMode>>,
+    mut contexts:  EguiContexts,
+    mut mode_ev:   EventWriter<RequestEditorMode>,
+    mode:          Res<State<EditorMode>>,
+    mut new_ev:    EventWriter<NewSceneRequest>,
+    mut open_ev:   EventWriter<OpenSceneRequest>,
+    mut save_ev:   EventWriter<SaveSceneRequest>,
+    mut undo_ev:   EventWriter<UndoRequested>,
+    mut redo_ev:   EventWriter<RedoRequested>,
+    mut start_ev:  EventWriter<StartPie>,
+    mut stop_ev:   EventWriter<StopPie>,
+    mut pause_ev:  EventWriter<PausePie>,
+    history:       Res<CommandHistory>,
 ) {
-    if *mode.get() != EditorMode::Editing {
-        return;
-    }
-
     let ctx = contexts.ctx_mut();
+    let current_mode = *mode.get();
 
     egui::TopBottomPanel::top("nf_menu_bar").show(ctx, |ui| {
         egui::menu::bar(ui, |ui| {
+            // ── File ─────────────────────────────────────────────────────
             ui.menu_button("File", |ui| {
-                if ui.button("New Scene").clicked() { ui.close_menu(); }
-                if ui.button("Open Scene…").clicked() { ui.close_menu(); }
-                if ui.button("Save Scene").clicked() { ui.close_menu(); }
+                if ui.button("New Scene").clicked() {
+                    new_ev.send(NewSceneRequest);
+                    ui.close_menu();
+                }
+                if ui.button("Open Scene…").clicked() {
+                    // Placeholder: real file dialog added in Phase 3.
+                    open_ev.send(OpenSceneRequest(OPEN_SCENE_PLACEHOLDER.into()));
+                    ui.close_menu();
+                }
+                if ui.button("Save Scene").clicked() {
+                    save_ev.send(SaveSceneRequest);
+                    ui.close_menu();
+                }
                 ui.separator();
-                if ui.button("Quit").clicked() { std::process::exit(0); }
+                if ui.button("Quit").clicked() {
+                    std::process::exit(0);
+                }
             });
 
+            // ── Edit ─────────────────────────────────────────────────────
             ui.menu_button("Edit", |ui| {
-                if ui.button("Undo").clicked() { ui.close_menu(); }
-                if ui.button("Redo").clicked() { ui.close_menu(); }
+                let undo_label = history
+                    .undo_label()
+                    .map(|l| format!("Undo \"{l}\""))
+                    .unwrap_or_else(|| "Undo".into());
+                let redo_label = history
+                    .redo_label()
+                    .map(|l| format!("Redo \"{l}\""))
+                    .unwrap_or_else(|| "Redo".into());
+
+                if ui
+                    .add_enabled(history.undo_label().is_some(), egui::Button::new(undo_label))
+                    .clicked()
+                {
+                    undo_ev.send(UndoRequested);
+                    ui.close_menu();
+                }
+                if ui
+                    .add_enabled(history.redo_label().is_some(), egui::Button::new(redo_label))
+                    .clicked()
+                {
+                    redo_ev.send(RedoRequested);
+                    ui.close_menu();
+                }
                 ui.separator();
-                if ui.button("Project Settings…").clicked() { ui.close_menu(); }
+                if ui.button("Project Settings…").clicked() {
+                    ui.close_menu();
+                }
             });
 
+            // ── Window ───────────────────────────────────────────────────
             ui.menu_button("Window", |ui| {
                 if ui.button("Outliner").clicked() { ui.close_menu(); }
                 if ui.button("Details").clicked() { ui.close_menu(); }
@@ -58,13 +127,33 @@ fn draw_menu_bar(
                 if ui.button("Output Log").clicked() { ui.close_menu(); }
             });
 
-            // Toolbar-style play controls inline in the bar
+            // ── Play toolbar ─────────────────────────────────────────────
             ui.separator();
-            if ui.button("▶  Play").clicked() {
-                mode_ev.send(RequestEditorMode(EditorMode::PlayingInEditor));
-            }
-            if ui.button("⏸  Simulate").clicked() {
-                mode_ev.send(RequestEditorMode(EditorMode::Simulating));
+            match current_mode {
+                EditorMode::Editing => {
+                    if ui.button("▶  Play").clicked() {
+                        start_ev.send(StartPie);
+                    }
+                    if ui.button("⏸  Simulate").clicked() {
+                        mode_ev.send(RequestEditorMode(EditorMode::Simulating));
+                    }
+                }
+                EditorMode::PlayingInEditor | EditorMode::Simulating => {
+                    if ui.button("⏹  Stop").clicked() {
+                        stop_ev.send(StopPie);
+                    }
+                    if ui.button("⏸  Pause").clicked() {
+                        pause_ev.send(PausePie);
+                    }
+                }
+                EditorMode::Paused => {
+                    if ui.button("⏹  Stop").clicked() {
+                        stop_ev.send(StopPie);
+                    }
+                    if ui.button("▶  Resume").clicked() {
+                        mode_ev.send(RequestEditorMode(EditorMode::PlayingInEditor));
+                    }
+                }
             }
         });
     });
