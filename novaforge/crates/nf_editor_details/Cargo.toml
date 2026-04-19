@@ -11,3 +11,4 @@ nf_core        = { workspace = true }
 nf_editor_core = { workspace = true }
 nf_selection   = { workspace = true }
 nf_commands    = { workspace = true }
+nf_voxel_planet = { workspace = true }

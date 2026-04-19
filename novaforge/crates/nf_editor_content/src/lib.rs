@@ -48,7 +48,7 @@ fn draw_content_panel(
                         ui.label("Content/");
                         ui.indent("folders", |ui| {
                             for folder in ["Scenes", "Prefabs", "Meshes", "Materials", "Audio"] {
-                                ui.selectable_label(false, folder);
+                                let _ = ui.selectable_label(false, folder);
                             }
                         });
                     });

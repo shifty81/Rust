@@ -10,6 +10,7 @@ members = [
     "crates/nf_commands",
     "crates/nf_gizmos",
     "crates/nf_selection",
+    "crates/nf_voxel_planet",
     "crates/nf_editor_core",
     "crates/nf_editor_ui",
     "crates/nf_editor_viewport",
@@ -20,6 +21,7 @@ members = [
     "crates/nf_editor_play",
     "crates/nf_editor_log",
     "crates/nf_editor_project",
+    "crates/nf_editor_world_settings",
     "crates/nf_runtime_app",
     "crates/nf_editor_app",
 ]
@@ -35,6 +37,8 @@ bevy_egui   = { version = "0.28", default-features = false, features = ["default
 serde       = { version = "1",    features = ["derive"] }
 ron         = "0.8"
 uuid        = { version = "1",    features = ["v4", "serde"] }
+noise       = "0.9"
+rand        = "0.8"
 
 # Workspace-internal crates
 nf_core              = { path = "crates/nf_core" }
@@ -46,6 +50,7 @@ nf_prefab            = { path = "crates/nf_prefab" }
 nf_commands          = { path = "crates/nf_commands" }
 nf_gizmos            = { path = "crates/nf_gizmos" }
 nf_selection         = { path = "crates/nf_selection" }
+nf_voxel_planet      = { path = "crates/nf_voxel_planet" }
 nf_editor_core       = { path = "crates/nf_editor_core" }
 nf_editor_ui         = { path = "crates/nf_editor_ui" }
 nf_editor_viewport   = { path = "crates/nf_editor_viewport" }
@@ -56,6 +61,7 @@ nf_editor_scene      = { path = "crates/nf_editor_scene" }
 nf_editor_play       = { path = "crates/nf_editor_play" }
 nf_editor_log        = { path = "crates/nf_editor_log" }
 nf_editor_project    = { path = "crates/nf_editor_project" }
+nf_editor_world_settings = { path = "crates/nf_editor_world_settings" }
 
 [profile.dev]
 opt-level = 1

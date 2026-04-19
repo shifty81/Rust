@@ -1,0 +1,10 @@
+[package]
+name    = "nf_voxel_planet"
+version = "0.1.0"
+edition = "2021"
+description = "Rust Voxel Planet Engine: 1/128 Earth-scale planet with solar system, biomes, weather, and character controller"
+
+[dependencies]
+bevy  = { workspace = true }
+noise = { workspace = true }
+rand  = { workspace = true }

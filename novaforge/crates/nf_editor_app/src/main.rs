@@ -1,55 +1,63 @@
 //! `nf_editor_app` — NovaForge editor executable.
 //!
-//! Composes all editor and runtime plugins into a single Bevy app.
+//! Centred around the Rust Voxel Planet Engine.  The editor loads the full
+//! voxel world (solar system, planet terrain, atmosphere, vegetation) at
+//! startup and provides a planet-aware free-fly camera.  The player controller
+//! is only active during Play-In-Editor sessions.
 
 use bevy::prelude::*;
 
-// Runtime crates
-use nf_assets::AssetsPlugin;
-use nf_scene::ScenePlugin;
-use nf_render::RenderPlugin;
-use nf_game::GamePlugin;
-use nf_prefab::PrefabPlugin;
-use nf_selection::SelectionPlugin;
-use nf_gizmos::GizmosPlugin;
-use nf_commands::CommandHistoryPlugin;
+// ── Voxel planet engine ──────────────────────────────────────────────────────
+use nf_voxel_planet::VoxelPlanetPlugins;
 
-// Editor crates
+// ── Shared infrastructure plugins ───────────────────────────────────────────
+use nf_assets::AssetsPlugin;
+use nf_commands::CommandHistoryPlugin;
+use nf_gizmos::GizmosPlugin;
+use nf_prefab::PrefabPlugin;
+use nf_render::RenderPlugin;
+use nf_scene::ScenePlugin;
+use nf_selection::SelectionPlugin;
+
+// ── Editor plugins ───────────────────────────────────────────────────────────
+use nf_editor_content::EditorContentPlugin;
 use nf_editor_core::EditorCorePlugin;
+use nf_editor_details::EditorDetailsPlugin;
+use nf_editor_log::EditorLogPlugin;
+use nf_editor_outliner::EditorOutlinerPlugin;
+use nf_editor_play::EditorPlayPlugin;
+use nf_editor_project::EditorProjectPlugin;
+use nf_editor_scene::EditorScenePlugin;
 use nf_editor_ui::EditorUiPlugin;
 use nf_editor_viewport::EditorViewportPlugin;
-use nf_editor_outliner::EditorOutlinerPlugin;
-use nf_editor_details::EditorDetailsPlugin;
-use nf_editor_content::EditorContentPlugin;
-use nf_editor_scene::EditorScenePlugin;
-use nf_editor_play::EditorPlayPlugin;
-use nf_editor_log::EditorLogPlugin;
-use nf_editor_project::EditorProjectPlugin;
+use nf_editor_world_settings::EditorWorldSettingsPlugin;
 
 fn main() {
     App::new()
-        // ── host window ──────────────────────────────────────────────────────
+        // ── Host window ──────────────────────────────────────────────────────
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "NovaForge Editor".into(),
+                title: "NovaForge Editor — Voxel Planet".into(),
                 ..default()
             }),
             ..default()
         }))
 
-        // ── shared / runtime plugins ─────────────────────────────────────────
+        // ── Voxel planet engine (world without player) ───────────────────────
+        .add_plugins(VoxelPlanetPlugins)
+
+        // ── Shared infrastructure ────────────────────────────────────────────
         .add_plugins((
             AssetsPlugin,
             ScenePlugin,
             RenderPlugin,
-            GamePlugin,
             PrefabPlugin,
             SelectionPlugin,
             GizmosPlugin,
             CommandHistoryPlugin,
         ))
 
-        // ── editor plugins ───────────────────────────────────────────────────
+        // ── Editor plugins ───────────────────────────────────────────────────
         .add_plugins((
             EditorCorePlugin,
             EditorUiPlugin,
@@ -61,6 +69,7 @@ fn main() {
             EditorPlayPlugin,
             EditorLogPlugin,
             EditorProjectPlugin,
+            EditorWorldSettingsPlugin,
         ))
 
         .run();

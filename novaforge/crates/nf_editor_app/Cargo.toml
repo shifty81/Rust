@@ -2,7 +2,7 @@
 name    = "nf_editor_app"
 version = "0.1.0"
 edition = "2021"
-description = "Editor executable — composes all editor plugins around the shared game/render crates."
+description = "Editor executable — composes all editor plugins around the voxel planet engine."
 
 [[bin]]
 name = "nf_editor_app"
@@ -12,7 +12,6 @@ path = "src/main.rs"
 bevy = { workspace = true }
 bevy_egui             = { workspace = true }
 nf_core               = { workspace = true }
-nf_game               = { workspace = true }
 nf_render             = { workspace = true }
 nf_assets             = { workspace = true }
 nf_scene              = { workspace = true }
@@ -20,6 +19,7 @@ nf_prefab             = { workspace = true }
 nf_commands           = { workspace = true }
 nf_gizmos             = { workspace = true }
 nf_selection          = { workspace = true }
+nf_voxel_planet       = { workspace = true }
 nf_editor_core        = { workspace = true }
 nf_editor_ui          = { workspace = true }
 nf_editor_viewport    = { workspace = true }
@@ -30,3 +30,4 @@ nf_editor_scene       = { workspace = true }
 nf_editor_play        = { workspace = true }
 nf_editor_log         = { workspace = true }
 nf_editor_project     = { workspace = true }
+nf_editor_world_settings = { workspace = true }

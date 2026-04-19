@@ -1,19 +1,20 @@
 //! `nf_runtime_app` — shipped game executable.
 //!
-//! Composes only runtime plugins.  No editor code is linked here.
+//! Composes the voxel planet engine and player controller.
+//! No editor code is linked here.
 
 use bevy::prelude::*;
-use nf_game::GamePlugin;
-use nf_render::RenderPlugin;
 use nf_assets::AssetsPlugin;
+use nf_render::RenderPlugin;
 use nf_scene::ScenePlugin;
+use nf_voxel_planet::{PlayerPlugin, VoxelPlanetPlugins};
 
 fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins.set(WindowPlugin {
                 primary_window: Some(Window {
-                    title: "NovaForge".into(),
+                    title: "Voxel Planet".into(),
                     ..default()
                 }),
                 ..default()
@@ -21,7 +22,10 @@ fn main() {
             AssetsPlugin,
             ScenePlugin,
             RenderPlugin,
-            GamePlugin,
+            // World: solar system + planet terrain + atmosphere + vegetation.
+            VoxelPlanetPlugins,
+            // First-person player controller.
+            PlayerPlugin,
         ))
         .run();
 }

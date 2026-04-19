@@ -2779,12 +2779,13 @@ dependencies = [
  "nf_editor_scene",
  "nf_editor_ui",
  "nf_editor_viewport",
- "nf_game",
+ "nf_editor_world_settings",
  "nf_gizmos",
  "nf_prefab",
  "nf_render",
  "nf_scene",
  "nf_selection",
+ "nf_voxel_planet",
 ]
 
 [[package]]
@@ -2818,6 +2819,7 @@ dependencies = [
  "nf_core",
  "nf_editor_core",
  "nf_selection",
+ "nf_voxel_planet",
 ]
 
 [[package]]
@@ -2840,6 +2842,7 @@ dependencies = [
  "nf_core",
  "nf_editor_core",
  "nf_selection",
+ "nf_voxel_planet",
 ]
 
 [[package]]
@@ -2849,8 +2852,8 @@ dependencies = [
  "bevy",
  "nf_core",
  "nf_editor_core",
- "nf_game",
  "nf_scene",
+ "nf_voxel_planet",
 ]
 
 [[package]]
@@ -2883,8 +2886,11 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy_egui",
+ "nf_commands",
  "nf_core",
  "nf_editor_core",
+ "nf_editor_play",
+ "nf_editor_scene",
 ]
 
 [[package]]
@@ -2897,6 +2903,17 @@ dependencies = [
  "nf_editor_core",
  "nf_gizmos",
  "nf_selection",
+ "nf_voxel_planet",
+]
+
+[[package]]
+name = "nf_editor_world_settings"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "bevy_egui",
+ "nf_editor_core",
+ "nf_voxel_planet",
 ]
 
 [[package]]
@@ -2944,9 +2961,9 @@ dependencies = [
  "bevy",
  "nf_assets",
  "nf_core",
- "nf_game",
  "nf_render",
  "nf_scene",
+ "nf_voxel_planet",
 ]
 
 [[package]]
@@ -2970,6 +2987,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "nf_voxel_planet"
+version = "0.1.0"
+dependencies = [
+ "bevy",
+ "noise",
+ "rand",
+]
+
+[[package]]
 name = "nix"
 version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2986,6 +3012,17 @@ name = "nohash-hasher"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2bf50223579dc7cdcfb3bfcacf7069ff68243f8c363f62ffa99cf000a6b9c451"
+
+[[package]]
+name = "noise"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6da45c8333f2e152fc665d78a380be060eb84fad8ca4c9f7ac8ca29216cff0cc"
+dependencies = [
+ "num-traits",
+ "rand",
+ "rand_xorshift",
+]
 
 [[package]]
 name = "nom"
@@ -3471,6 +3508,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ppv-lite86"
+version = "0.2.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "85eae3c4ed2f50dcfe72643da4befc30deadb458a9b590d720cde2f2b1e97da9"
+dependencies = [
+ "zerocopy",
+]
+
+[[package]]
 name = "presser"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3558,6 +3604,18 @@ version = "0.8.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5ca0ecfa931c29007047d1bc58e623ab12e5590e8c7cc53200d5202b69266d8a"
 dependencies = [
+ "libc",
+ "rand_chacha",
+ "rand_core",
+]
+
+[[package]]
+name = "rand_chacha"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
+dependencies = [
+ "ppv-lite86",
  "rand_core",
 ]
 
@@ -3566,6 +3624,18 @@ name = "rand_core"
 version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
+dependencies = [
+ "getrandom 0.2.17",
+]
+
+[[package]]
+name = "rand_xorshift"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d25bf25ec5ae4a3f1b92f929810509a2f53d7dca2f50b794ff57e3face536c8f"
+dependencies = [
+ "rand_core",
+]
 
 [[package]]
 name = "range-alloc"

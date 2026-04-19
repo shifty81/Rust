@@ -56,7 +56,29 @@ impl Plugin for EditorLogPlugin {
     fn build(&self, app: &mut App) {
         app
             .init_resource::<OutputLog>()
-            .add_systems(Update, draw_log_panel);
+            .add_event::<ClearOutputLog>()
+            .add_systems(Update, (handle_clear_log, draw_log_panel).chain());
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Events
+// ────────────────────────────────────────────────────────────────────────────
+
+/// Request to clear all records from the output log.
+#[derive(Event)]
+pub struct ClearOutputLog;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Systems
+// ────────────────────────────────────────────────────────────────────────────
+
+fn handle_clear_log(
+    mut events: EventReader<ClearOutputLog>,
+    mut log:    ResMut<OutputLog>,
+) {
+    for _ev in events.read() {
+        log.records.clear();
     }
 }
 
@@ -67,6 +89,7 @@ impl Plugin for EditorLogPlugin {
 fn draw_log_panel(
     mut contexts: EguiContexts,
     log:          Res<OutputLog>,
+    mut clear_ev: EventWriter<ClearOutputLog>,
     mode:         Res<State<EditorMode>>,
 ) {
     if *mode.get() != EditorMode::Editing {
@@ -82,7 +105,7 @@ fn draw_log_panel(
             ui.horizontal(|ui| {
                 ui.heading("Output Log");
                 if ui.small_button("Clear").clicked() {
-                    // Clearing handled via command in Phase 2.
+                    clear_ev.send(ClearOutputLog);
                 }
             });
             ui.separator();

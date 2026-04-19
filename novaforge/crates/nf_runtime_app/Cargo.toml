@@ -9,9 +9,9 @@ name = "nf_runtime_app"
 path = "src/main.rs"
 
 [dependencies]
-bevy     = { workspace = true }
-nf_core   = { workspace = true }
-nf_game   = { workspace = true }
-nf_render = { workspace = true }
-nf_scene  = { workspace = true }
-nf_assets = { workspace = true }
+bevy            = { workspace = true }
+nf_core         = { workspace = true }
+nf_voxel_planet = { workspace = true }
+nf_render       = { workspace = true }
+nf_scene        = { workspace = true }
+nf_assets       = { workspace = true }

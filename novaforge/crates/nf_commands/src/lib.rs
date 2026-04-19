@@ -81,6 +81,24 @@ impl CommandHistory {
 #[derive(Event)]
 pub struct CommandHistoryChanged;
 
+/// Request the command history to perform an undo.
+#[derive(Event)]
+pub struct UndoRequested;
+
+/// Request the command history to perform a redo.
+#[derive(Event)]
+pub struct RedoRequested;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Cursor resource for exclusive undo/redo system
+// ────────────────────────────────────────────────────────────────────────────
+
+#[derive(Resource, Default)]
+struct UndoRedoCursor {
+    undo: bevy::ecs::event::ManualEventReader<UndoRequested>,
+    redo: bevy::ecs::event::ManualEventReader<RedoRequested>,
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Plugin
 // ────────────────────────────────────────────────────────────────────────────
@@ -91,6 +109,43 @@ impl Plugin for CommandHistoryPlugin {
     fn build(&self, app: &mut App) {
         app
             .init_resource::<CommandHistory>()
-            .add_event::<CommandHistoryChanged>();
+            .init_resource::<UndoRedoCursor>()
+            .add_event::<CommandHistoryChanged>()
+            .add_event::<UndoRequested>()
+            .add_event::<RedoRequested>()
+            .add_systems(Update, apply_undo_redo);
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Exclusive undo/redo system
+// ────────────────────────────────────────────────────────────────────────────
+
+/// Drain all pending events of type `E` from the cursor and return the count.
+fn drain_events<E: Event>(world: &mut World, cursor: &mut bevy::ecs::event::ManualEventReader<E>) -> usize {
+    world.resource_scope(|world, events: Mut<Events<E>>| cursor.read(&*events).count())
+}
+
+fn apply_undo_redo(world: &mut World) {
+    let undo_count = world.resource_scope(|world, mut cursor: Mut<UndoRedoCursor>| {
+        drain_events::<UndoRequested>(world, &mut cursor.undo)
+    });
+
+    let redo_count = world.resource_scope(|world, mut cursor: Mut<UndoRedoCursor>| {
+        drain_events::<RedoRequested>(world, &mut cursor.redo)
+    });
+
+    for _ in 0..undo_count {
+        world.resource_scope(|world, mut history: Mut<CommandHistory>| {
+            history.undo(world);
+        });
+        world.send_event(CommandHistoryChanged);
+    }
+
+    for _ in 0..redo_count {
+        world.resource_scope(|world, mut history: Mut<CommandHistory>| {
+            history.redo(world);
+        });
+        world.send_event(CommandHistoryChanged);
     }
 }
