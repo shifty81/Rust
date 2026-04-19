@@ -20,7 +20,8 @@ fn spawn_vegetation_around_player(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     player_query: Query<&Transform, With<Player>>,
-    tree_query: Query<&Transform, (With<Tree>, Without<Player>)>,
+    tree_query:  Query<(Entity, &Transform), (With<Tree>, Without<Player>)>,
+    grass_query: Query<(Entity, &Transform), (With<GrassDecoration>, Without<Player>)>,
     seed: Res<NoiseSeed>,
 ) {
     let Ok(player_tf) = player_query.get_single() else { return };
@@ -28,12 +29,33 @@ fn spawn_vegetation_around_player(
     let player_pos = player_tf.translation;
     let local_up   = player_pos.normalize_or_zero();
 
-    let existing: usize = tree_query
+    // ── Despawn vegetation that has moved out of range ──────────────────────
+    let despawn_radius = VEGETATION_RADIUS * 1.5;
+    for (entity, tf) in &tree_query {
+        if (tf.translation - player_pos).length() > despawn_radius {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+    for (entity, tf) in &grass_query {
+        if (tf.translation - player_pos).length() > despawn_radius {
+            commands.entity(entity).despawn_recursive();
+        }
+    }
+
+    // ── Early-out if already dense enough ───────────────────────────────────
+    let existing_trees: usize = tree_query
         .iter()
-        .filter(|tf| (tf.translation - player_pos).length() < VEGETATION_RADIUS)
+        .filter(|(_, tf)| (tf.translation - player_pos).length() < VEGETATION_RADIUS)
         .count();
 
-    if existing > 80 { return; }
+    let existing_grass: usize = grass_query
+        .iter()
+        .filter(|(_, tf)| (tf.translation - player_pos).length() < VEGETATION_RADIUS)
+        .count();
+
+    let need_trees = existing_trees < 80;
+    let need_grass = existing_grass < 200;
+    if !need_trees && !need_grass { return; }
 
     let mut rng = rand::thread_rng();
 
@@ -56,32 +78,46 @@ fn spawn_vegetation_around_player(
         let moisture  = simple_moisture(cand_dir, seed.0);
         let biome     = classify_biome(latitude, altitude, moisture);
 
-        match biome {
-            Biome::Forest | Biome::TropicalForest => {
-                if rng.gen_range(0.0f32..1.0) < TREE_PROB_FOREST {
-                    let pos = cand_dir * (surface_r + 0.5);
-                    spawn_tree(&mut commands, &mut meshes, &mut materials, pos, cand_dir, TreeKind::Broadleaf, &mut rng);
+        if need_trees {
+            match biome {
+                Biome::Forest | Biome::TropicalForest => {
+                    if rng.gen_range(0.0f32..1.0) < TREE_PROB_FOREST {
+                        let pos = cand_dir * (surface_r + 0.5);
+                        spawn_tree(&mut commands, &mut meshes, &mut materials, pos, cand_dir, TreeKind::Broadleaf, &mut rng);
+                    }
                 }
-            }
-            Biome::Plains | Biome::Savanna => {
-                if rng.gen_range(0.0f32..1.0) < TREE_PROB_PLAINS {
-                    let pos = cand_dir * (surface_r + 0.5);
-                    spawn_tree(&mut commands, &mut meshes, &mut materials, pos, cand_dir, TreeKind::Oak, &mut rng);
+                Biome::Plains | Biome::Savanna => {
+                    if rng.gen_range(0.0f32..1.0) < TREE_PROB_PLAINS {
+                        let pos = cand_dir * (surface_r + 0.5);
+                        spawn_tree(&mut commands, &mut meshes, &mut materials, pos, cand_dir, TreeKind::Oak, &mut rng);
+                    }
                 }
-            }
-            Biome::Desert => {
-                if rng.gen_range(0.0f32..1.0) < TREE_PROB_DESERT {
-                    let pos = cand_dir * (surface_r + 0.5);
-                    spawn_tree(&mut commands, &mut meshes, &mut materials, pos, cand_dir, TreeKind::Cactus, &mut rng);
+                Biome::Desert => {
+                    if rng.gen_range(0.0f32..1.0) < TREE_PROB_DESERT {
+                        let pos = cand_dir * (surface_r + 0.5);
+                        spawn_tree(&mut commands, &mut meshes, &mut materials, pos, cand_dir, TreeKind::Cactus, &mut rng);
+                    }
                 }
-            }
-            Biome::Tundra => {
-                if rng.gen_range(0.0f32..1.0) < TREE_PROB_TUNDRA {
-                    let pos = cand_dir * (surface_r + 0.5);
-                    spawn_tree(&mut commands, &mut meshes, &mut materials, pos, cand_dir, TreeKind::Pine, &mut rng);
+                Biome::Tundra => {
+                    if rng.gen_range(0.0f32..1.0) < TREE_PROB_TUNDRA {
+                        let pos = cand_dir * (surface_r + 0.5);
+                        spawn_tree(&mut commands, &mut meshes, &mut materials, pos, cand_dir, TreeKind::Pine, &mut rng);
+                    }
                 }
+                _ => {}
             }
-            _ => {}
+        }
+
+        if need_grass {
+            match biome {
+                Biome::Plains | Biome::Forest | Biome::TropicalForest | Biome::Savanna => {
+                    if rng.gen_range(0.0f32..1.0) < GRASS_SPAWN_CHANCE {
+                        let pos = cand_dir * (surface_r + 0.02);
+                        spawn_grass(&mut commands, &mut meshes, &mut materials, pos, cand_dir, &mut rng);
+                    }
+                }
+                _ => {}
+            }
         }
     }
 }
@@ -233,6 +269,59 @@ fn spawn_tree(
                 });
         }
     }
+}
+
+fn spawn_grass(
+    commands:  &mut Commands,
+    meshes:    &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    position:  Vec3,
+    surface_normal: Vec3,
+    rng: &mut impl Rng,
+) {
+    let up      = surface_normal;
+    let ref_vec = if up.abs().dot(Vec3::X) < 0.9 { Vec3::X } else { Vec3::Z };
+    let right   = up.cross(ref_vec).normalize();
+    let forward = right.cross(up).normalize();
+    let rotation = Quat::from_mat3(&Mat3::from_cols(right, up, forward));
+
+    let height: f32 = rng.gen_range(0.3f32..0.80);
+    let width:  f32 = rng.gen_range(0.2f32..0.45);
+    let green:  f32 = rng.gen_range(0.42f32..0.68);
+
+    let mat = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.18, green, 0.12),
+        perceptual_roughness: 0.85,
+        double_sided: true,
+        cull_mode: None,
+        ..default()
+    });
+    // Thin cuboid standing upright in local space — width × height × thin.
+    let blade_mesh = meshes.add(Cuboid::new(width, height, 0.025));
+
+    commands
+        .spawn((
+            TransformBundle::from_transform(Transform { translation: position, rotation, ..default() }),
+            VisibilityBundle::default(),
+            GrassDecoration,
+            Name::new("Grass"),
+        ))
+        .with_children(|p| {
+            // Three blades rotated around the local-up axis for variety.
+            for i in 0..3_u32 {
+                let blade_angle = i as f32 * PI / 3.0 + rng.gen_range(-0.25f32..0.25);
+                p.spawn(PbrBundle {
+                    mesh:     blade_mesh.clone(),
+                    material: mat.clone(),
+                    transform: Transform {
+                        translation: Vec3::new(0.0, height * 0.5, 0.0),
+                        rotation:    Quat::from_axis_angle(Vec3::Y, blade_angle),
+                        ..default()
+                    },
+                    ..default()
+                });
+            }
+        });
 }
 
 fn simple_moisture(dir: Vec3, seed: u32) -> f32 {

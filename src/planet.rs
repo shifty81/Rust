@@ -17,7 +17,12 @@ impl Plugin for PlanetPlugin {
             .add_systems(Startup, setup_planet)
             .add_systems(
                 Update,
-                (queue_chunks_around_player, generate_pending_chunks).chain(),
+                (
+                    unload_distant_chunks,
+                    queue_chunks_around_player,
+                    generate_pending_chunks,
+                )
+                    .chain(),
             );
     }
 }
@@ -128,6 +133,35 @@ fn build_planet_mesh(seed: u32) -> Mesh {
 //  Chunk management
 // ---------------------------------------------------------------------------
 
+/// Despawn chunk entities that are no longer within render distance.
+/// Uses the `VoxelChunk.position` component to find candidates via ECS query,
+/// avoiding an entity-ID lookup through the `ChunkManager` map.
+fn unload_distant_chunks(
+    mut commands: Commands,
+    player_query: Query<&Transform, With<Player>>,
+    chunk_query:  Query<(Entity, &VoxelChunk)>,
+    mut chunk_mgr: ResMut<ChunkManager>,
+) {
+    let Ok(player_tf) = player_query.get_single() else { return };
+    let p = player_tf.translation;
+
+    let cs = (CHUNK_SIZE as f32) * VOXEL_SIZE;
+    let cx = (p.x / cs).floor() as i32;
+    let cy = (p.y / cs).floor() as i32;
+    let cz = (p.z / cs).floor() as i32;
+    let player_chunk = IVec3::new(cx, cy, cz);
+
+    let unload_sq = (RENDER_DISTANCE + 2) * (RENDER_DISTANCE + 2);
+
+    for (entity, chunk) in &chunk_query {
+        let d = chunk.position - player_chunk;
+        if d.x * d.x + d.y * d.y + d.z * d.z > unload_sq {
+            commands.entity(entity).despawn_recursive();
+            chunk_mgr.loaded.remove(&chunk.position);
+        }
+    }
+}
+
 fn queue_chunks_around_player(
     player_query: Query<&Transform, With<Player>>,
     mut chunk_mgr: ResMut<ChunkManager>,
@@ -155,21 +189,6 @@ fn queue_chunks_around_player(
                 }
             }
         }
-    }
-
-    let unload_sq = (rd + 2) * (rd + 2);
-    let to_unload: Vec<IVec3> = chunk_mgr
-        .loaded
-        .keys()
-        .filter(|&&pos| {
-            let d = pos - IVec3::new(cx, cy, cz);
-            d.x * d.x + d.y * d.y + d.z * d.z > unload_sq
-        })
-        .copied()
-        .collect();
-
-    for pos in to_unload {
-        chunk_mgr.loaded.remove(&pos);
     }
 }
 
