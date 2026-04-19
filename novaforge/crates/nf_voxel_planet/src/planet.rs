@@ -9,6 +9,47 @@ use crate::components::*;
 use crate::config::*;
 use crate::RegenerateWorld;
 
+// ---------------------------------------------------------------------------
+//  Noise + material cache
+// ---------------------------------------------------------------------------
+
+/// Holds pre-built noise functions so they are not rebuilt every frame.
+/// Rebuilt automatically when [`NoiseSeed`] changes.
+#[derive(Resource)]
+pub struct NoiseCache {
+    /// Seed the cache was built from.
+    pub seed:         u32,
+    /// Height FBM used for terrain.
+    pub height_fbm:   Fbm<Perlin>,
+    /// Moisture FBM used for biome classification.
+    pub moisture_fbm: Fbm<Perlin>,
+    /// Shared material applied to every voxel chunk.
+    pub chunk_mat:    Option<Handle<StandardMaterial>>,
+}
+
+impl NoiseCache {
+    fn build(seed: u32) -> Self {
+        let height_fbm: Fbm<Perlin> = Fbm::<Perlin>::new(seed)
+            .set_octaves(8)
+            .set_frequency(TERRAIN_NOISE_SCALE)
+            .set_lacunarity(2.0)
+            .set_persistence(0.5);
+
+        let moisture_fbm: Fbm<Perlin> = Fbm::<Perlin>::new(seed.wrapping_add(7777))
+            .set_octaves(5)
+            .set_frequency(MOISTURE_NOISE_SCALE)
+            .set_lacunarity(2.1)
+            .set_persistence(0.45);
+
+        Self {
+            seed,
+            height_fbm,
+            moisture_fbm,
+            chunk_mat: None,
+        }
+    }
+}
+
 pub struct PlanetPlugin;
 
 impl Plugin for PlanetPlugin {
@@ -16,14 +57,16 @@ impl Plugin for PlanetPlugin {
         app.init_resource::<ChunkManager>()
             .init_resource::<NoiseSeed>()
             .init_resource::<WorldSettings>()
+            .init_resource::<ChunkViewpoint>()
             .add_event::<RegenerateWorld>()
-            .add_systems(Startup, setup_planet)
+            .add_systems(Startup, (setup_planet, init_noise_cache).chain())
             .add_systems(
                 Update,
                 (
+                    rebuild_noise_on_seed_change,
                     handle_regen_world,
                     unload_distant_chunks,
-                    queue_chunks_around_player,
+                    queue_chunks_around_viewpoint,
                     generate_pending_chunks,
                 )
                     .chain(),
@@ -32,7 +75,37 @@ impl Plugin for PlanetPlugin {
 }
 
 // ---------------------------------------------------------------------------
-//  Planet overview mesh
+//  Noise cache initialisation / rebuilding
+// ---------------------------------------------------------------------------
+
+fn init_noise_cache(seed: Res<NoiseSeed>, mut commands: Commands) {
+    commands.insert_resource(NoiseCache::build(seed.0));
+}
+
+/// Rebuild the noise cache whenever the noise seed changes (e.g. via the
+/// World Settings panel) and clear pending chunks so old-seed geometry is not
+/// mixed with new-seed geometry.
+fn rebuild_noise_on_seed_change(
+    seed:          Res<NoiseSeed>,
+    mut cache:     ResMut<NoiseCache>,
+    mut chunk_mgr: ResMut<ChunkManager>,
+    chunk_query:   Query<Entity, With<VoxelChunk>>,
+    mut commands:  Commands,
+) {
+    if !seed.is_changed() { return; }
+    if cache.seed == seed.0 { return; }
+
+    *cache = NoiseCache::build(seed.0);
+
+    // Despawn all existing chunks so they are regenerated with the new seed.
+    for entity in &chunk_query {
+        commands.entity(entity).despawn_recursive();
+    }
+    chunk_mgr.loaded.clear();
+    chunk_mgr.pending.clear();
+}
+
+
 // ---------------------------------------------------------------------------
 
 fn setup_planet(
@@ -153,21 +226,22 @@ fn handle_regen_world(
 }
 
 // ---------------------------------------------------------------------------
-//  Chunk management
+//  Chunk management — driven by ChunkViewpoint (player OR editor camera)
 // ---------------------------------------------------------------------------
 
 fn unload_distant_chunks(
-    mut commands: Commands,
-    player_query: Query<&Transform, With<Player>>,
-    chunk_query:  Query<(Entity, &VoxelChunk)>,
-    mut chunk_mgr: ResMut<ChunkManager>,
+    mut commands:   Commands,
+    viewpoint:      Res<ChunkViewpoint>,
+    chunk_query:    Query<(Entity, &VoxelChunk)>,
+    mut chunk_mgr:  ResMut<ChunkManager>,
     world_settings: Res<WorldSettings>,
 ) {
-    let Ok(player_tf) = player_query.get_single() else { return };
-    let p = player_tf.translation;
+    // No viewpoint yet (no camera/player has written to it).
+    if viewpoint.0 == Vec3::ZERO { return; }
 
+    let p  = viewpoint.0;
     let cs = (CHUNK_SIZE as f32) * VOXEL_SIZE;
-    let player_chunk = IVec3::new(
+    let view_chunk = IVec3::new(
         (p.x / cs).floor() as i32,
         (p.y / cs).floor() as i32,
         (p.z / cs).floor() as i32,
@@ -177,7 +251,7 @@ fn unload_distant_chunks(
     let unload_sq = (rd + 2) * (rd + 2);
 
     for (entity, chunk) in &chunk_query {
-        let d = chunk.position - player_chunk;
+        let d = chunk.position - view_chunk;
         if d.x * d.x + d.y * d.y + d.z * d.z > unload_sq {
             commands.entity(entity).despawn_recursive();
             chunk_mgr.loaded.remove(&chunk.position);
@@ -185,14 +259,14 @@ fn unload_distant_chunks(
     }
 }
 
-fn queue_chunks_around_player(
-    player_query: Query<&Transform, With<Player>>,
-    mut chunk_mgr: ResMut<ChunkManager>,
+fn queue_chunks_around_viewpoint(
+    viewpoint:      Res<ChunkViewpoint>,
+    mut chunk_mgr:  ResMut<ChunkManager>,
     world_settings: Res<WorldSettings>,
 ) {
-    let Ok(player_tf) = player_query.get_single() else { return };
-    let p = player_tf.translation;
+    if viewpoint.0 == Vec3::ZERO { return; }
 
+    let p  = viewpoint.0;
     let cs = (CHUNK_SIZE as f32) * VOXEL_SIZE;
     let cx = (p.x / cs).floor() as i32;
     let cy = (p.y / cs).floor() as i32;
@@ -221,27 +295,19 @@ fn generate_pending_chunks(
     mut meshes:     ResMut<Assets<Mesh>>,
     mut materials:  ResMut<Assets<StandardMaterial>>,
     mut chunk_mgr:  ResMut<ChunkManager>,
-    seed:           Res<NoiseSeed>,
+    mut cache:      ResMut<NoiseCache>,
     world_settings: Res<WorldSettings>,
 ) {
-    let height_fbm: Fbm<Perlin> = Fbm::<Perlin>::new(seed.0)
-        .set_octaves(8)
-        .set_frequency(TERRAIN_NOISE_SCALE)
-        .set_lacunarity(2.0)
-        .set_persistence(0.5);
-
-    let moisture_fbm: Fbm<Perlin> = Fbm::<Perlin>::new(seed.0.wrapping_add(7777))
-        .set_octaves(5)
-        .set_frequency(MOISTURE_NOISE_SCALE)
-        .set_lacunarity(2.1)
-        .set_persistence(0.45);
-
-    let mat = materials.add(StandardMaterial {
-        perceptual_roughness: 0.92,
-        metallic: 0.0,
-        double_sided: false,
-        ..default()
-    });
+    // Ensure the shared chunk material exists.
+    if cache.chunk_mat.is_none() {
+        cache.chunk_mat = Some(materials.add(StandardMaterial {
+            perceptual_roughness: 0.92,
+            metallic: 0.0,
+            double_sided: false,
+            ..default()
+        }));
+    }
+    let mat = cache.chunk_mat.clone().unwrap();
 
     let mut generated = 0;
     while generated < world_settings.max_chunks_per_frame {
@@ -251,7 +317,8 @@ fn generate_pending_chunks(
             continue;
         }
 
-        let (voxels, solid_count) = generate_chunk_data(coord, &height_fbm, &moisture_fbm);
+        let (voxels, solid_count) =
+            generate_chunk_data(coord, &cache.height_fbm, &cache.moisture_fbm);
         let Some((mesh, vertex_count)) = build_chunk_mesh(&voxels) else {
             chunk_mgr.loaded.insert(coord, Entity::PLACEHOLDER);
             generated += 1;

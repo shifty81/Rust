@@ -123,7 +123,7 @@ impl Plugin for CommandHistoryPlugin {
 
 /// Drain all pending events of type `E` from the cursor and return the count.
 fn drain_events<E: Event>(world: &mut World, cursor: &mut bevy::ecs::event::ManualEventReader<E>) -> usize {
-    world.resource_scope(|world, events: Mut<Events<E>>| cursor.read(&*events).count())
+    world.resource_scope(|_world, events: Mut<Events<E>>| cursor.read(&*events).count())
 }
 
 fn apply_undo_redo(world: &mut World) {

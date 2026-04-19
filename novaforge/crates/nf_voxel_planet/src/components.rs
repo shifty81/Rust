@@ -181,6 +181,15 @@ impl Default for WeatherState {
     }
 }
 
+/// The world-space position used as the centre for chunk-loading decisions.
+///
+/// Updated every frame from either the player controller (PIE / runtime) or the
+/// editor camera (Editing mode).  Chunk queuing and unloading both read this
+/// instead of querying the `Player` transform directly, so the terrain generates
+/// correctly even when there is no player entity in the world.
+#[derive(Resource, Default)]
+pub struct ChunkViewpoint(pub Vec3);
+
 /// Stores the noise seed for reproducible world generation.
 #[derive(Resource)]
 pub struct NoiseSeed(pub u32);

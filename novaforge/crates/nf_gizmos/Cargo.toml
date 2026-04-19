@@ -5,6 +5,7 @@ edition = "2021"
 description = "Transform gizmos (translate/rotate/scale), grid snapping, and picking helpers."
 
 [dependencies]
-bevy         = { workspace = true }
-nf_core      = { workspace = true }
-nf_selection = { workspace = true }
+bevy            = { workspace = true }
+nf_core         = { workspace = true }
+nf_editor_core  = { workspace = true }
+nf_selection    = { workspace = true }

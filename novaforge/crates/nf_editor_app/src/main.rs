@@ -5,6 +5,7 @@
 //! startup and provides a planet-aware free-fly camera.  The player controller
 //! is only active during Play-In-Editor sessions.
 
+use bevy::diagnostic::{EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin};
 use bevy::prelude::*;
 
 // ── Voxel planet engine ──────────────────────────────────────────────────────
@@ -42,6 +43,12 @@ fn main() {
             }),
             ..default()
         }))
+
+        // ── Diagnostics ──────────────────────────────────────────────────────
+        .add_plugins((
+            FrameTimeDiagnosticsPlugin::default(),
+            EntityCountDiagnosticsPlugin,
+        ))
 
         // ── Voxel planet engine (world without player) ───────────────────────
         .add_plugins(VoxelPlanetPlugins)

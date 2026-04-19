@@ -15,6 +15,7 @@ impl Plugin for PlayerPlugin {
             .add_systems(
                 Update,
                 (
+                    update_chunk_viewpoint_from_player,
                     handle_mouse_look,
                     handle_movement,
                     apply_gravity,
@@ -68,6 +69,16 @@ pub fn spawn_voxel_player(commands: &mut Commands, seed: u32) {
 
 fn setup_player(mut commands: Commands, seed: Res<NoiseSeed>) {
     spawn_voxel_player(&mut commands, seed.0);
+}
+
+/// Keep the ChunkViewpoint resource in sync with the player's world position.
+pub fn update_chunk_viewpoint_from_player(
+    player_q:      Query<&Transform, With<Player>>,
+    mut viewpoint: ResMut<ChunkViewpoint>,
+) {
+    if let Ok(tf) = player_q.get_single() {
+        viewpoint.0 = tf.translation;
+    }
 }
 
 fn setup_cursor(mut windows: Query<&mut Window>) {

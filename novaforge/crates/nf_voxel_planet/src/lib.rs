@@ -22,8 +22,8 @@ pub use atmosphere::AtmospherePlugin;
 pub use biome::{classify_biome, Biome, Voxel};
 pub use components::*;
 pub use config::*;
-pub use planet::{terrain_radius_at, PlanetPlugin};
-pub use player::PlayerPlugin;
+pub use planet::{terrain_radius_at, NoiseCache, PlanetPlugin};
+pub use player::{update_chunk_viewpoint_from_player, PlayerPlugin};
 pub use solar_system::SolarSystemPlugin;
 pub use vegetation::VegetationPlugin;
 

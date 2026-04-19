@@ -15,6 +15,7 @@ use nf_voxel_planet::{
     player::{
         align_to_surface, apply_gravity, handle_mouse_look, handle_movement,
         spawn_voxel_player, toggle_cursor, update_camera_pitch,
+        update_chunk_viewpoint_from_player,
     },
     NoiseSeed, Player,
 };
@@ -60,6 +61,7 @@ impl Plugin for EditorPlayPlugin {
             .add_systems(
                 Update,
                 (
+                    update_chunk_viewpoint_from_player,
                     handle_mouse_look,
                     handle_movement,
                     apply_gravity,
