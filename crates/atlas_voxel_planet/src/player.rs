@@ -21,6 +21,7 @@ impl Plugin for PlayerPlugin {
                     apply_gravity,
                     align_to_surface,
                     update_camera_pitch,
+                    update_survival_stats,
                     toggle_cursor,
                 )
                     .chain(),
@@ -151,7 +152,11 @@ pub fn handle_movement(
     }
 
     // ── Walking mode ─────────────────────────────────────────────────────────
-    let speed = if keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight) {
+    let is_sprinting = (keyboard.pressed(KeyCode::ShiftLeft)
+        || keyboard.pressed(KeyCode::ShiftRight))
+        && state.stamina > 0.0;
+
+    let speed = if is_sprinting {
         PLAYER_RUN_SPEED
     } else {
         PLAYER_WALK_SPEED
@@ -222,6 +227,10 @@ pub fn apply_gravity(
     let feet_r    = terrain_r + PLAYER_FOOT_CLEARANCE;
 
     if new_dist < feet_r {
+        // Compute the inward radial speed just before landing.
+        let impact_speed = -state.velocity.dot(new_up); // positive = falling inward
+        let was_airborne = !state.is_grounded;
+
         transform.translation = new_up * feet_r;
         let radial = new_up * state.velocity.dot(new_up);
         if radial.dot(new_up) < 0.0 {
@@ -229,10 +238,20 @@ pub fn apply_gravity(
         }
         state.is_grounded    = true;
         state.grounded_timer += time.delta_seconds();
+
+        // Apply fall damage on the first frame of landing.
+        if was_airborne && impact_speed > FALL_DAMAGE_THRESHOLD {
+            let damage = (impact_speed - FALL_DAMAGE_THRESHOLD) * FALL_DAMAGE_SCALE;
+            state.health = (state.health - damage).max(0.0);
+        }
     } else {
         state.is_grounded    = false;
         state.grounded_timer = 0.0;
     }
+
+    // Record radial velocity for the next frame's fall-damage check.
+    let cur_up = transform.translation.normalize_or_zero();
+    state.prev_radial_velocity = state.velocity.dot(cur_up);
 }
 
 pub fn align_to_surface(
@@ -281,5 +300,32 @@ pub fn toggle_cursor(
             window.cursor.grab_mode = if locked { CursorGrabMode::None } else { CursorGrabMode::Locked };
             window.cursor.visible   = locked;
         }
+    }
+}
+
+/// Drain stamina while sprinting; regenerate stamina when idle/walking;
+/// regenerate health slowly when stamina is above 50 % and the player is grounded.
+pub fn update_survival_stats(
+    time:         Res<Time>,
+    keyboard:     Res<ButtonInput<KeyCode>>,
+    mut player_q: Query<&mut PlayerState, With<Player>>,
+) {
+    let Ok(mut state) = player_q.get_single_mut() else { return };
+
+    let dt = time.delta_seconds();
+
+    let is_sprinting = !state.is_flying
+        && (keyboard.pressed(KeyCode::ShiftLeft) || keyboard.pressed(KeyCode::ShiftRight))
+        && state.stamina > 0.0;
+
+    if is_sprinting {
+        state.stamina = (state.stamina - STAMINA_SPRINT_DRAIN * dt).max(0.0);
+    } else {
+        state.stamina = (state.stamina + STAMINA_REGEN_RATE * dt).min(PLAYER_MAX_STAMINA);
+    }
+
+    // Health regenerates slowly when grounded and stamina is above 50 %.
+    if state.is_grounded && state.stamina >= PLAYER_MAX_STAMINA * 0.5 {
+        state.health = (state.health + HEALTH_REGEN_RATE * dt).min(PLAYER_MAX_HEALTH);
     }
 }

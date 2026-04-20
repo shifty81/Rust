@@ -26,6 +26,8 @@ pub struct NoiseCache {
     pub height_fbm:       Fbm<Perlin>,
     /// Moisture FBM used for biome classification.
     pub moisture_fbm:     Fbm<Perlin>,
+    /// 3-D FBM used to carve underground cave passages.
+    pub cave_fbm:         Fbm<Perlin>,
     /// Shared material applied to every voxel chunk.
     pub chunk_mat:        Option<Handle<StandardMaterial>>,
     // ── Snapshot of generation params (used for change detection) ──────────
@@ -35,6 +37,9 @@ pub struct NoiseCache {
     pub noise_octaves:        usize,
     pub noise_lacunarity:     f64,
     pub noise_persistence:    f64,
+    pub cave_enabled:         bool,
+    pub cave_scale:           f64,
+    pub cave_threshold:       f32,
 }
 
 impl NoiseCache {
@@ -51,10 +56,17 @@ impl NoiseCache {
             .set_lacunarity(settings.noise_lacunarity)
             .set_persistence(settings.noise_persistence);
 
+        let cave_fbm: Fbm<Perlin> = Fbm::<Perlin>::new(seed.wrapping_add(31337))
+            .set_octaves(4)
+            .set_frequency(settings.cave_scale)
+            .set_lacunarity(2.0)
+            .set_persistence(0.5);
+
         Self {
             seed,
             height_fbm,
             moisture_fbm,
+            cave_fbm,
             chunk_mat: None,
             terrain_noise_scale:  settings.terrain_noise_scale,
             moisture_noise_scale: settings.moisture_noise_scale,
@@ -62,6 +74,9 @@ impl NoiseCache {
             noise_octaves:        settings.noise_octaves,
             noise_lacunarity:     settings.noise_lacunarity,
             noise_persistence:    settings.noise_persistence,
+            cave_enabled:         settings.cave_enabled,
+            cave_scale:           settings.cave_scale,
+            cave_threshold:       settings.cave_threshold,
         }
     }
 
@@ -74,6 +89,9 @@ impl NoiseCache {
             && self.noise_octaves        == settings.noise_octaves
             && self.noise_lacunarity     == settings.noise_lacunarity
             && self.noise_persistence    == settings.noise_persistence
+            && self.cave_enabled         == settings.cave_enabled
+            && self.cave_scale           == settings.cave_scale
+            && self.cave_threshold       == settings.cave_threshold
     }
 }
 
@@ -90,6 +108,7 @@ impl Plugin for PlanetPlugin {
             .add_systems(
                 Update,
                 (
+                    animate_ocean_waves,
                     rebuild_noise_on_settings_change,
                     handle_regen_world,
                     unload_distant_chunks,
@@ -169,11 +188,14 @@ fn setup_planet(
     ));
 
     // ── Ocean / sea-level sphere ─────────────────────────────────────────────
-    // A slightly-transparent sphere at exactly sea-level radius.  Blended on
-    // top of the planet overview so shallow oceans and beaches show beneath.
+    // A slightly-transparent animated sphere at exactly sea-level radius.
+    // The mesh is rebuilt every frame with sine-wave vertex displacement to
+    // give the appearance of ocean waves.
+    let ocean_mesh_handle = meshes.add(build_ocean_mesh(0.0));
+    commands.insert_resource(OceanWaves { mesh_handle: ocean_mesh_handle.clone(), phase: 0.0, frame_skip: 0 });
     commands.spawn((
         PbrBundle {
-            mesh: meshes.add(Sphere::new(SEA_LEVEL).mesh().uv(64, 32)),
+            mesh: ocean_mesh_handle,
             material: materials.add(StandardMaterial {
                 base_color: Color::srgba(0.04, 0.22, 0.62, 0.72),
                 alpha_mode: AlphaMode::Blend,
@@ -264,6 +286,96 @@ fn build_planet_mesh(seed: u32, max_terrain_height: f32) -> Mesh {
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR,    colors);
     mesh.insert_indices(Indices::U32(indices));
     mesh
+}
+
+// ---------------------------------------------------------------------------
+//  Animated ocean mesh
+// ---------------------------------------------------------------------------
+
+/// Build a UV-sphere mesh at sea level with per-vertex sine-wave displacement.
+///
+/// `phase` is the current wave phase in radians; it advances each frame by
+/// `OCEAN_WAVE_SPEED * delta_seconds`.  A low-resolution grid
+/// (`OCEAN_WAVE_SEGMENTS_LAT × OCEAN_WAVE_SEGMENTS_LON`) keeps the per-frame
+/// rebuild cheap while still producing clearly visible wave crests.
+fn build_ocean_mesh(phase: f32) -> Mesh {
+    let lat_segs = OCEAN_WAVE_SEGMENTS_LAT;
+    let lon_segs = OCEAN_WAVE_SEGMENTS_LON;
+
+    let vert_count = ((lat_segs + 1) * (lon_segs + 1)) as usize;
+    let mut positions: Vec<[f32; 3]> = Vec::with_capacity(vert_count);
+    let mut normals:   Vec<[f32; 3]> = Vec::with_capacity(vert_count);
+    let mut uvs:       Vec<[f32; 2]> = Vec::with_capacity(vert_count);
+
+    for lat_i in 0..=lat_segs {
+        let v   = lat_i as f32 / lat_segs as f32;
+        let phi = PI * (v - 0.5);
+
+        for lon_i in 0..=lon_segs {
+            let u     = lon_i as f32 / lon_segs as f32;
+            let theta = 2.0 * PI * u;
+
+            let nx = phi.cos() * theta.cos();
+            let ny = phi.sin();
+            let nz = phi.cos() * theta.sin();
+
+            // Two-frequency sine wave on the sphere surface.
+            let wave = OCEAN_WAVE_AMPLITUDE
+                * ((OCEAN_WAVE_FREQ * theta + phase).sin()
+                    * (OCEAN_WAVE_FREQ * 0.6 * phi + phase * 0.7).cos());
+
+            let r = SEA_LEVEL + wave;
+            positions.push([nx * r, ny * r, nz * r]);
+            normals.push([nx, ny, nz]);
+            uvs.push([u, v]);
+        }
+    }
+
+    let mut indices: Vec<u32> = Vec::with_capacity((lat_segs * lon_segs * 6) as usize);
+    for lat_i in 0..lat_segs {
+        for lon_i in 0..lon_segs {
+            let row = lon_segs + 1;
+            let v0  = lat_i * row + lon_i;
+            let v1  = v0 + 1;
+            let v2  = v0 + row;
+            let v3  = v2 + 1;
+            indices.extend_from_slice(&[v0, v2, v1, v1, v2, v3]);
+        }
+    }
+
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL,   normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0,     uvs);
+    mesh.insert_indices(Indices::U32(indices));
+    mesh
+}
+
+/// Advance the ocean wave phase and rebuild the ocean mesh in-place.
+///
+/// The mesh is only rebuilt every other frame to halve the CPU cost while
+/// keeping wave motion visually smooth.
+fn animate_ocean_waves(
+    time:       Res<Time>,
+    mut waves:  ResMut<OceanWaves>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    waves.phase += OCEAN_WAVE_SPEED * time.delta_seconds();
+    // Keep phase in a reasonable range to avoid float precision creep.
+    waves.phase %= 2.0 * PI;
+
+    waves.frame_skip = waves.frame_skip.wrapping_add(1);
+    if waves.frame_skip % 2 != 0 {
+        return;
+    }
+
+    match meshes.get_mut(&waves.mesh_handle) {
+        Some(mesh) => *mesh = build_ocean_mesh(waves.phase),
+        None => warn!("animate_ocean_waves: ocean mesh asset not found; wave animation skipped"),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -431,11 +543,15 @@ fn spawn_chunk_generation_tasks(
         // Clone the FBMs so the closure is `'static` (Fbm<Perlin>: Clone+Send+Sync).
         let height_fbm   = cache.height_fbm.clone();
         let moisture_fbm = cache.moisture_fbm.clone();
+        let cave_fbm     = cache.cave_fbm.clone();
         let max_h        = cache.max_terrain_height;
+        let cave_enabled = cache.cave_enabled;
+        let cave_thresh  = cache.cave_threshold;
 
         let task = pool.spawn(async move {
             let (voxels, solid_count) =
-                generate_chunk_data(coord, &height_fbm, &moisture_fbm, max_h);
+                generate_chunk_data(coord, &height_fbm, &moisture_fbm, &cave_fbm,
+                                    max_h, cave_enabled, cave_thresh);
             let mesh_data = build_chunk_mesh_data(&voxels);
             (coord, voxels, solid_count, mesh_data)
         });
@@ -512,7 +628,11 @@ fn poll_chunk_generation_tasks(
     }
 }
 
-/// Build raw mesh data on a background thread (no GPU resources).
+/// Build raw mesh data on a background thread using **greedy meshing**.
+///
+/// Adjacent faces with the same voxel type are merged into a single larger
+/// quad per layer/direction, greatly reducing the triangle count on flat or
+/// uniform terrain while preserving per-corner ambient occlusion.
 fn build_chunk_mesh_data(voxels: &[Voxel]) -> Option<ChunkMeshData> {
     let cs = CHUNK_SIZE as i32;
 
@@ -521,38 +641,29 @@ fn build_chunk_mesh_data(voxels: &[Voxel]) -> Option<ChunkMeshData> {
     let mut colors:    Vec<[f32; 4]> = Vec::new();
     let mut indices:   Vec<u32>      = Vec::new();
 
-    // Face directions — order must match FACE_AO below.
-    const DIRS: [(i32, i32, i32); 6] = [
-        (1, 0, 0), (-1, 0, 0),
-        (0, 1, 0), (0, -1, 0),
-        (0, 0, 1), (0, 0, -1),
-    ];
-
     // Per-face, per-vertex AO neighbour offsets: [edge0, edge1, corner].
-    // Derived by computing which 3 voxels share each integer face-vertex
-    // position on the external side of the face.  Both edge neighbours are
-    // used in the standard AO formula; if both are solid the vertex is fully
-    // occluded regardless of the corner.
+    // Each entry corresponds to one of the 4 vertices of the face quad.
+    // Offsets are relative to the solid voxel position (lx,ly,lz).
     type AoTriplet   = [(i32,i32,i32); 3]; // [edge0, edge1, corner]
     type FaceAoTable = [AoTriplet; 4];     // one per quad vertex
 
     const FACE_AO: [FaceAoTable; 6] = [
-        // +X
+        // +X  (face index 0)
         [[(1,-1, 0),(1, 0,-1),(1,-1,-1)],[(1, 0,-1),(1, 1, 0),(1, 1,-1)],
          [(1, 1, 0),(1, 0, 1),(1, 1, 1)],[(1,-1, 0),(1, 0, 1),(1,-1, 1)]],
-        // -X
+        // -X  (face index 1)
         [[(-1,-1, 0),(-1, 0, 1),(-1,-1, 1)],[(-1, 0, 1),(-1, 1, 0),(-1, 1, 1)],
          [(-1, 0,-1),(-1, 1, 0),(-1, 1,-1)],[(-1,-1, 0),(-1, 0,-1),(-1,-1,-1)]],
-        // +Y
+        // +Y  (face index 2)
         [[(-1, 1, 0),(0, 1,-1),(-1, 1,-1)],[(-1, 1, 0),(0, 1, 1),(-1, 1, 1)],
          [(0, 1, 1),(1, 1, 0),(1, 1, 1)],  [(0, 1,-1),(1, 1, 0),(1, 1,-1)]],
-        // -Y
+        // -Y  (face index 3)
         [[(-1,-1, 0),(0,-1, 1),(-1,-1, 1)],[(-1,-1, 0),(0,-1,-1),(-1,-1,-1)],
          [(0,-1,-1),(1,-1, 0),(1,-1,-1)],  [(0,-1, 1),(1,-1, 0),(1,-1, 1)]],
-        // +Z
+        // +Z  (face index 4)
         [[(0,-1, 1),(1, 0, 1),(1,-1, 1)],  [(0, 1, 1),(1, 0, 1),(1, 1, 1)],
          [(-1, 0, 1),(0, 1, 1),(-1, 1, 1)],[(-1, 0, 1),(0,-1, 1),(-1,-1, 1)]],
-        // -Z
+        // -Z  (face index 5)
         [[(-1, 0,-1),(0,-1,-1),(-1,-1,-1)],[(-1, 0,-1),(0, 1,-1),(-1, 1,-1)],
          [(0, 1,-1),(1, 0,-1),(1, 1,-1)],  [(0,-1,-1),(1, 0,-1),(1,-1,-1)]],
     ];
@@ -560,44 +671,124 @@ fn build_chunk_mesh_data(voxels: &[Voxel]) -> Option<ChunkMeshData> {
     // Brightness per AO level (0 = two solid edges = darkest, 3 = fully lit).
     const AO_BRIGHT: [f32; 4] = [0.35, 0.60, 0.80, 1.00];
 
-    for lx in 0..cs {
-        for ly in 0..cs {
-            for lz in 0..cs {
-                let v = get_voxel(voxels, lx, ly, lz);
-                if !v.is_solid() { continue; }
+    // Face normals, indexed by face_idx (0–5).
+    const FACE_NORMALS: [[f32; 3]; 6] = [
+        [ 1., 0., 0.], [-1., 0., 0.],
+        [ 0., 1., 0.], [ 0.,-1., 0.],
+        [ 0., 0., 1.], [ 0., 0.,-1.],
+    ];
 
-                let [r, g, b, a] = v.color();
-                let ox = lx as f32;
-                let oy = ly as f32;
-                let oz = lz as f32;
+    // Face direction deltas for neighbour visibility test.
+    const FACE_DELTA: [(i32,i32,i32); 6] = [
+        (1,0,0),(-1,0,0),(0,1,0),(0,-1,0),(0,0,1),(0,0,-1),
+    ];
 
-                for (face_idx, (dx, dy, dz)) in DIRS.iter().enumerate() {
-                    let (dx, dy, dz) = (*dx, *dy, *dz);
-                    let neighbour = get_voxel(voxels, lx + dx, ly + dy, lz + dz);
-                    if neighbour.is_solid() { continue; }
+    // ── Greedy meshing: sweep one 2-D layer at a time for each face ───────────
+    //
+    // Axis mapping for each face:
+    //   face 0,1 (+X,-X): layer = x, u = y, v = z
+    //   face 2,3 (+Y,-Y): layer = y, u = x, v = z
+    //   face 4,5 (+Z,-Z): layer = z, u = x, v = y
+    //
+    // For each (layer, u, v) cell we record the voxel whose face is exposed in
+    // this direction.  We then greedily extend rectangles of the same voxel type,
+    // emitting one quad per merged rectangle.  AO is computed only for the four
+    // corners of the merged quad, which maps correctly to the four corner voxels.
 
-                    let face_verts   = face_vertices(ox, oy, oz, dx, dy, dz);
-                    let normal       = [dx as f32, dy as f32, dz as f32];
-                    let ao_table     = &FACE_AO[face_idx];
+    // Reusable mask and visited buffers (cs × cs).
+    let area = (cs * cs) as usize;
+    let mut mask:    Vec<Option<Voxel>> = vec![None; area];
+    let mut visited: Vec<bool>          = vec![false; area];
 
-                    // Compute per-vertex AO and gather brightness values.
+    for face_idx in 0..6_usize {
+        let (ddx, ddy, ddz) = FACE_DELTA[face_idx];
+
+        for layer in 0..cs {
+            // ── Build 2-D visibility mask for this layer ──────────────────
+            for cell in mask.iter_mut()    { *cell    = None;  }
+            for cell in visited.iter_mut() { *cell    = false; }
+
+            for ui in 0..cs {
+                for vi in 0..cs {
+                    let (lx, ly, lz) = layer_uv_to_lxyz(face_idx, layer, ui, vi);
+                    let vox = get_voxel(voxels, lx, ly, lz);
+                    if !vox.is_solid() { continue; }
+                    let nbr = get_voxel(voxels, lx + ddx, ly + ddy, lz + ddz);
+                    if nbr.is_solid()  { continue; }
+                    mask[(ui * cs + vi) as usize] = Some(vox);
+                }
+            }
+
+            // ── Greedy merge ──────────────────────────────────────────────
+            for u0 in 0..cs {
+                for v0 in 0..cs {
+                    let idx = (u0 * cs + v0) as usize;
+                    if visited[idx] || mask[idx].is_none() { continue; }
+                    let target = mask[idx].unwrap();
+
+                    // Extend along v first.
+                    let mut v1 = v0 + 1;
+                    while v1 < cs {
+                        let i = (u0 * cs + v1) as usize;
+                        if mask[i] != Some(target) || visited[i] { break; }
+                        v1 += 1;
+                    }
+
+                    // Extend along u, keeping the full v0..v1 strip valid.
+                    let mut u1 = u0 + 1;
+                    'u_loop: while u1 < cs {
+                        for vi in v0..v1 {
+                            let i = (u1 * cs + vi) as usize;
+                            if mask[i] != Some(target) || visited[i] {
+                                break 'u_loop;
+                            }
+                        }
+                        u1 += 1;
+                    }
+
+                    // Mark covered cells as visited.
+                    for ui in u0..u1 {
+                        for vi in v0..v1 {
+                            visited[(ui * cs + vi) as usize] = true;
+                        }
+                    }
+
+                    // ── Compute AO for 4 merged-quad corners ─────────────
+                    // Each corner maps to a specific vertex of the face of a
+                    // specific voxel at the corner of the merged region.
+                    let corners = corner_voxels_and_vertices(face_idx, layer, u0, v0, u1, v1);
                     let mut ao_levels = [3u8; 4];
-                    for (vi, [e0, e1, c]) in ao_table.iter().enumerate() {
-                        let s0 = get_voxel(voxels, lx+e0.0, ly+e0.1, lz+e0.2).is_solid();
-                        let s1 = get_voxel(voxels, lx+e1.0, ly+e1.1, lz+e1.2).is_solid();
-                        let sc = get_voxel(voxels, lx+c.0,  ly+c.1,  lz+c.2 ).is_solid();
-                        ao_levels[vi] = if s0 && s1 { 0 }
+                    for (ci, (cvx, cvy, cvz, vertex_in_face)) in corners.iter().enumerate() {
+                        let ao_triplet = &FACE_AO[face_idx][*vertex_in_face];
+                        let s0 = get_voxel(voxels,
+                            cvx + ao_triplet[0].0,
+                            cvy + ao_triplet[0].1,
+                            cvz + ao_triplet[0].2).is_solid();
+                        let s1 = get_voxel(voxels,
+                            cvx + ao_triplet[1].0,
+                            cvy + ao_triplet[1].1,
+                            cvz + ao_triplet[1].2).is_solid();
+                        let sc = get_voxel(voxels,
+                            cvx + ao_triplet[2].0,
+                            cvy + ao_triplet[2].1,
+                            cvz + ao_triplet[2].2).is_solid();
+                        ao_levels[ci] = if s0 && s1 { 0 }
                                         else { 3 - (s0 as u8 + s1 as u8 + sc as u8) };
                     }
 
-                    // Flip the quad diagonal when it reduces AO anisotropy.
-                    let base = positions.len() as u32;
+                    // ── Emit quad ─────────────────────────────────────────
+                    let quad_verts = merged_quad_positions(face_idx, layer, u0, v0, u1, v1);
+                    let [r, g, b, a] = target.color();
+                    let normal = FACE_NORMALS[face_idx];
+                    let base   = positions.len() as u32;
+
+                    // Flip the diagonal when it reduces AO gradient anisotropy.
                     let flip = (ao_levels[0] as u16 + ao_levels[2] as u16)
                              < (ao_levels[1] as u16 + ao_levels[3] as u16);
 
-                    for (vi, fv) in face_verts.iter().enumerate() {
+                    for (vi, qv) in quad_verts.iter().enumerate() {
                         let bright = AO_BRIGHT[ao_levels[vi] as usize];
-                        positions.push(*fv);
+                        positions.push(*qv);
                         normals.push(normal);
                         colors.push([r * bright, g * bright, b * bright, a]);
                     }
@@ -642,7 +833,10 @@ fn generate_chunk_data(
     coord:              IVec3,
     height_fbm:         &impl NoiseFn<f64, 3>,
     moisture_fbm:       &impl NoiseFn<f64, 3>,
+    cave_fbm:           &impl NoiseFn<f64, 3>,
     max_terrain_height: f32,
+    cave_enabled:       bool,
+    cave_threshold:     f32,
 ) -> (Vec<Voxel>, u32) {
     let mut voxels = vec![Voxel::Air; CHUNK_VOL];
     let mut solid  = 0u32;
@@ -686,6 +880,15 @@ fn generate_chunk_data(
                 let m_raw    = moisture_fbm.get([nx, ny, nz]) as f32;
                 let moisture = (m_raw + 1.0) * 0.5;
                 let biome    = classify_biome(dir.y, altitude, moisture);
+
+                // Cave carving: only below a minimum depth so surfaces stay intact.
+                if cave_enabled && depth >= CAVE_MIN_DEPTH {
+                    let cave_val = cave_fbm.get([wx as f64, wy as f64, wz as f64]) as f32;
+                    let cave_remapped = (cave_val + 1.0) * 0.5; // remap [-1,1] → [0,1]
+                    if cave_remapped > cave_threshold {
+                        continue; // leave as Air
+                    }
+                }
 
                 let idx = voxel_index(lx as usize, ly as usize, lz as usize);
                 voxels[idx] = voxel_for_depth(biome, depth);
@@ -741,14 +944,90 @@ pub fn build_chunk_mesh(voxels: &[Voxel]) -> Option<(Mesh, u32)> {
     Some((mesh_from_data(data), vertex_count))
 }
 
-fn face_vertices(ox: f32, oy: f32, oz: f32, dx: i32, dy: i32, dz: i32) -> [[f32; 3]; 4] {
-    match (dx, dy, dz) {
-        (1, 0, 0)  => [[ox+1.,oy,    oz   ],[ox+1.,oy+1.,oz   ],[ox+1.,oy+1.,oz+1.],[ox+1.,oy,    oz+1.]],
-        (-1, 0, 0) => [[ox,   oy,    oz+1.],[ox,   oy+1.,oz+1.],[ox,   oy+1.,oz   ],[ox,   oy,    oz   ]],
-        (0, 1, 0)  => [[ox,   oy+1.,oz   ],[ox,   oy+1.,oz+1.],[ox+1.,oy+1.,oz+1.],[ox+1.,oy+1.,oz   ]],
-        (0, -1, 0) => [[ox,   oy,    oz+1.],[ox,   oy,    oz   ],[ox+1.,oy,    oz   ],[ox+1.,oy,    oz+1.]],
-        (0, 0, 1)  => [[ox+1.,oy,    oz+1.],[ox+1.,oy+1.,oz+1.],[ox,   oy+1.,oz+1.],[ox,   oy,    oz+1.]],
-        _          => [[ox,   oy,    oz   ],[ox,   oy+1.,oz   ],[ox+1.,oy+1.,oz   ],[ox+1.,oy,    oz   ]],
+// ---------------------------------------------------------------------------
+//  Greedy meshing helpers
+// ---------------------------------------------------------------------------
+
+/// Map 2-D slice coordinates back to 3-D local voxel coordinates.
+///
+/// The axis assignment for each face direction:
+/// * face 0,1 (±X): layer = x, u = y, v = z
+/// * face 2,3 (±Y): layer = y, u = x, v = z
+/// * face 4,5 (±Z): layer = z, u = x, v = y
+#[inline]
+fn layer_uv_to_lxyz(face_idx: usize, layer: i32, u: i32, v: i32) -> (i32, i32, i32) {
+    match face_idx {
+        0 | 1 => (layer, u, v),
+        2 | 3 => (u, layer, v),
+        4 | 5 => (u, v, layer),
+        _     => unreachable!("layer_uv_to_lxyz: invalid face_idx {}", face_idx),
+    }
+}
+
+/// For a merged quad covering `u0..u1` × `v0..v1` on the given face/layer,
+/// return `[(voxel_x, voxel_y, voxel_z, vertex_in_face); 4]` — one entry per
+/// corner of the merged quad.  These are used to look up AO from `FACE_AO`.
+///
+/// Derivation: each corner of the merged quad coincides with one vertex of the
+/// single-voxel face at the corresponding corner voxel.  The vertex index
+/// within that face follows the original winding order for each face direction.
+#[inline]
+fn corner_voxels_and_vertices(
+    face_idx: usize,
+    layer:    i32,
+    u0:       i32,
+    v0:       i32,
+    u1:       i32,
+    v1:       i32,
+) -> [(i32, i32, i32, usize); 4] {
+    let (u1m, v1m) = (u1 - 1, v1 - 1); // inclusive maxima
+    match face_idx {
+        // +X  axis=X, u=y, v=z; voxels at (layer, u, v)
+        0 => [(layer,u0,v0,  0),(layer,u1m,v0, 1),(layer,u1m,v1m,2),(layer,u0,v1m, 3)],
+        // -X  same axis mapping, reversed v winding
+        1 => [(layer,u0,v1m,0),(layer,u1m,v1m,1),(layer,u1m,v0,  2),(layer,u0,v0,  3)],
+        // +Y  axis=Y, u=x, v=z; voxels at (u, layer, v)
+        2 => [(u0,layer,v0,  0),(u0,layer,v1m,1),(u1m,layer,v1m,2),(u1m,layer,v0,  3)],
+        // -Y  reversed v winding
+        3 => [(u0,layer,v1m,0),(u0,layer,v0,  1),(u1m,layer,v0,  2),(u1m,layer,v1m,3)],
+        // +Z  axis=Z, u=x, v=y; voxels at (u, v, layer)
+        4 => [(u1m,v0,layer,0),(u1m,v1m,layer,1),(u0,v1m,layer,2),(u0,v0,layer,  3)],
+        // -Z  straight winding
+        _ => [(u0,v0,layer,  0),(u0,v1m,layer,1),(u1m,v1m,layer,2),(u1m,v0,layer, 3)],
+    }
+}
+
+/// World-space positions of the 4 vertices of a merged quad.
+///
+/// Winding is consistent with the original single-voxel `face_vertices` helper
+/// so that existing index-buffer logic and back-face culling still work.
+#[inline]
+fn merged_quad_positions(
+    face_idx: usize,
+    layer:    i32,
+    u0:       i32,
+    v0:       i32,
+    u1:       i32,
+    v1:       i32,
+) -> [[f32; 3]; 4] {
+    let (l, u0, v0, u1, v1) = (
+        layer as f32,
+        u0 as f32, v0 as f32,
+        u1 as f32, v1 as f32,
+    );
+    match face_idx {
+        // +X: face plane at x = l+1; u=y, v=z
+        0 => [[l+1.,u0,v0],[l+1.,u1,v0],[l+1.,u1,v1],[l+1.,u0,v1]],
+        // -X: face plane at x = l;   reversed v so the normal faces outward
+        1 => [[l,u0,v1],[l,u1,v1],[l,u1,v0],[l,u0,v0]],
+        // +Y: face plane at y = l+1; u=x, v=z
+        2 => [[u0,l+1.,v0],[u0,l+1.,v1],[u1,l+1.,v1],[u1,l+1.,v0]],
+        // -Y: face plane at y = l;   reversed v
+        3 => [[u0,l,v1],[u0,l,v0],[u1,l,v0],[u1,l,v1]],
+        // +Z: face plane at z = l+1; u=x, v=y
+        4 => [[u1,v0,l+1.],[u1,v1,l+1.],[u0,v1,l+1.],[u0,v0,l+1.]],
+        // -Z: face plane at z = l
+        _ => [[u0,v0,l],[u0,v1,l],[u1,v1,l],[u1,v0,l]],
     }
 }
 

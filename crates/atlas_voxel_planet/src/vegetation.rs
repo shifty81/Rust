@@ -316,7 +316,7 @@ fn spawn_grass(
         });
 }
 
-fn simple_moisture(dir: Vec3, seed: u32) -> f32 {
+pub fn simple_moisture(dir: Vec3, seed: u32) -> f32 {
     use noise::{Fbm, MultiFractal, NoiseFn, Perlin};
     let fbm: Fbm<Perlin> = Fbm::<Perlin>::new(seed.wrapping_add(7777))
         .set_octaves(3)

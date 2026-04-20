@@ -17,7 +17,7 @@ use bevy_egui::{egui, EguiContexts};
 use atlas_editor_core::EditorMode;
 use atlas_voxel_planet::{
     ChunkManager, NoiseSeed, RegenerateWorld, WeatherKind, WeatherState, WorldSettings, WorldTime,
-    DAY_LENGTH_SECONDS, FOG_END, FOG_START, GRAVITY_STRENGTH, PLANET_RADIUS,
+    CAVE_MIN_DEPTH, DAY_LENGTH_SECONDS, FOG_END, FOG_START, GRAVITY_STRENGTH, PLANET_RADIUS,
     PLAYER_EYE_HEIGHT, PLAYER_JUMP_SPEED, PLAYER_RUN_SPEED, PLAYER_WALK_SPEED,
 };
 
@@ -272,6 +272,52 @@ fn draw_world_settings_panel(
                             );
                             ui.end_row();
                         });
+                });
+
+            ui.separator();
+
+            // ── Caves ─────────────────────────────────────────────────────────
+            egui::CollapsingHeader::new("🕳  Caves")
+                .default_open(true)
+                .show(ui, |ui| {
+                    egui::Grid::new("cave_grid")
+                        .num_columns(2)
+                        .spacing([8.0, 4.0])
+                        .show(ui, |ui| {
+                            ui.label("Caves Enabled");
+                            ui.checkbox(&mut settings.cave_enabled, "");
+                            ui.end_row();
+
+                            ui.label("Cave Noise Scale");
+                            ui.add(
+                                egui::DragValue::new(&mut settings.cave_scale)
+                                    .speed(0.005)
+                                    .range(0.005..=0.5),
+                            );
+                            ui.end_row();
+
+                            ui.label("Cave Threshold");
+                            ui.add(
+                                egui::Slider::new(&mut settings.cave_threshold, 0.4..=0.95)
+                                    .text(""),
+                            );
+                            ui.end_row();
+
+                            ui.label("Min Depth (vx)");
+                            ui.label(format!("{CAVE_MIN_DEPTH}"));
+                            ui.end_row();
+                        });
+
+                    ui.separator();
+                    if ui
+                        .add_sized(
+                            [ui.available_width(), 24.0],
+                            egui::Button::new("♻  Regenerate World"),
+                        )
+                        .clicked()
+                    {
+                        regen_ev.send(RegenerateWorld);
+                    }
                 });
 
             ui.separator();

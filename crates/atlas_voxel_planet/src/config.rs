@@ -110,6 +110,30 @@ pub const PLAYER_FLY_SPEED: f32 = 400.0;
 /// Sprint flight speed in free-fly mode (m/s).
 pub const PLAYER_FLY_RUN_SPEED: f32 = 4_000.0;
 
+// ── Health & Stamina ─────────────────────────────────────────────────────────
+
+/// Maximum health points.
+pub const PLAYER_MAX_HEALTH:  f32 = 100.0;
+
+/// Maximum stamina points.
+pub const PLAYER_MAX_STAMINA: f32 = 100.0;
+
+/// Stamina drain rate while sprinting (points per second).
+pub const STAMINA_SPRINT_DRAIN: f32 = 20.0;
+
+/// Stamina regeneration rate while not sprinting (points per second).
+pub const STAMINA_REGEN_RATE: f32 = 10.0;
+
+/// Health regeneration rate (points per second) when stamina ≥ 50 and not falling.
+pub const HEALTH_REGEN_RATE: f32 = 2.0;
+
+/// Minimum inward radial speed (m/s) on landing that starts dealing fall damage.
+/// Below this threshold no damage is taken.
+pub const FALL_DAMAGE_THRESHOLD: f32 = 10.0;
+
+/// Fall-damage scale factor: damage = (impact_speed − threshold) × scale.
+pub const FALL_DAMAGE_SCALE: f32 = 5.0;
+
 // ============================================================
 //  ATMOSPHERE / WEATHER
 // ============================================================
@@ -150,3 +174,37 @@ pub const TREE_PROB_FOREST: f32 = TREE_SPAWN_CHANCE * 80.0;
 pub const TREE_PROB_PLAINS: f32 = TREE_SPAWN_CHANCE * 30.0;
 pub const TREE_PROB_DESERT: f32 = TREE_SPAWN_CHANCE * 10.0;
 pub const TREE_PROB_TUNDRA: f32 = TREE_SPAWN_CHANCE *  8.0;
+
+// ============================================================
+//  CAVE CONFIGURATION
+// ============================================================
+
+/// 3-D noise frequency used for cave carving.  Higher values = more, smaller caves.
+pub const CAVE_NOISE_SCALE: f64 = 0.06;
+
+/// Threshold above which the cave noise is considered "air" (cave).
+/// Range 0–1; higher = fewer, more selective caves.
+pub const CAVE_THRESHOLD: f32 = 0.65;
+
+/// Minimum voxel depth below the terrain surface before caves can appear (voxels).
+/// Prevents caves from breaking through to the surface.
+pub const CAVE_MIN_DEPTH: u32 = 4;
+
+// ============================================================
+//  OCEAN WAVE CONFIGURATION
+// ============================================================
+
+/// Latitude (ring) segments for the animated ocean mesh.
+pub const OCEAN_WAVE_SEGMENTS_LAT: u32 = 32;
+
+/// Longitude (column) segments for the animated ocean mesh.
+pub const OCEAN_WAVE_SEGMENTS_LON: u32 = 64;
+
+/// Peak-to-trough wave amplitude (metres).
+pub const OCEAN_WAVE_AMPLITUDE: f32 = 0.6;
+
+/// Wave angular frequency — how many crests fit around a great circle.
+pub const OCEAN_WAVE_FREQ: f32 = 7.0;
+
+/// Wave phase advance rate (radians per second of real time).
+pub const OCEAN_WAVE_SPEED: f32 = 0.35;

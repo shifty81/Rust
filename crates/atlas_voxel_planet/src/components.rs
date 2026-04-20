@@ -90,6 +90,16 @@ pub struct PlayerState {
     /// True while the player is in free-fly / space-flight mode.
     /// Gravity and surface alignment are disabled; movement follows camera look.
     pub is_flying: bool,
+
+    // ── Survival stats ───────────────────────────────────────────────────────
+    /// Current health points (0 – `PLAYER_MAX_HEALTH`).
+    pub health: f32,
+    /// Current stamina points (0 – `PLAYER_MAX_STAMINA`).
+    /// Drained while sprinting; regenerates while walking or standing still.
+    pub stamina: f32,
+    /// Radial (outward) velocity component recorded at the start of the
+    /// previous frame, used to detect hard landings for fall damage.
+    pub prev_radial_velocity: f32,
 }
 
 impl Default for PlayerState {
@@ -101,6 +111,9 @@ impl Default for PlayerState {
             is_grounded: false,
             grounded_timer: 0.0,
             is_flying: false,
+            health: 100.0,
+            stamina: 100.0,
+            prev_radial_velocity: 0.0,
         }
     }
 }
@@ -149,6 +162,22 @@ pub struct ChunkInfo {
 // ============================================================
 //  RESOURCES
 // ============================================================
+
+/// Handle to the animated ocean mesh and its current wave phase.
+///
+/// Stored as a resource so that [`animate_ocean_waves`] can locate the mesh
+/// asset each frame without querying the ocean entity.
+#[derive(Resource)]
+pub struct OceanWaves {
+    /// Handle to the [`bevy::render::mesh::Mesh`] asset used by the ocean entity.
+    pub mesh_handle: Handle<Mesh>,
+    /// Accumulated wave phase (radians).  Advances every frame by
+    /// `OCEAN_WAVE_SPEED * delta_seconds`.
+    pub phase: f32,
+    /// Frame counter used to skip mesh rebuilds; the mesh is only rebuilt
+    /// every other frame to halve the CPU cost.
+    pub frame_skip: u8,
+}
 
 /// Tracks simulation time (day/night cycle, seasons, etc.).
 #[derive(Resource)]
@@ -260,6 +289,14 @@ pub struct WorldSettings {
     pub tree_spawn_chance:  f32,
     /// Probability that a suitable voxel gets a grass blade.
     pub grass_spawn_chance: f32,
+
+    // ── Caves ────────────────────────────────────────────────────────────────
+    /// Whether underground cave carving is enabled.
+    pub cave_enabled:    bool,
+    /// 3-D noise frequency for cave shapes (higher = more, smaller caves).
+    pub cave_scale:      f64,
+    /// Noise threshold above which a voxel is carved to Air (0–1).
+    pub cave_threshold:  f32,
 }
 
 impl Default for WorldSettings {
@@ -276,6 +313,9 @@ impl Default for WorldSettings {
             vegetation_radius:    VEGETATION_RADIUS,
             tree_spawn_chance:    TREE_SPAWN_CHANCE,
             grass_spawn_chance:   GRASS_SPAWN_CHANCE,
+            cave_enabled:         true,
+            cave_scale:           CAVE_NOISE_SCALE,
+            cave_threshold:       CAVE_THRESHOLD,
         }
     }
 }
