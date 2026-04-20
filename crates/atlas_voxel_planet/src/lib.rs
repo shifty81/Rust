@@ -11,10 +11,12 @@ use bevy::prelude::*;
 
 pub mod atmosphere;
 pub mod biome;
+pub mod character;
 pub mod components;
 pub mod config;
 pub mod hud;
 pub mod inventory;
+pub mod multiplayer;
 pub mod planet;
 pub mod player;
 pub mod solar_system;
@@ -25,10 +27,12 @@ pub mod world_io;
 
 pub use atmosphere::AtmospherePlugin;
 pub use biome::{classify_biome, Biome, Voxel};
+pub use character::{CameraMode, CharacterPlugin};
 pub use components::*;
 pub use config::*;
 pub use hud::HudPlugin;
 pub use inventory::{Inventory, InventoryPlugin, VoxelRaycastResult};
+pub use multiplayer::{MultiplayerPlugin, NetworkConfig, NetworkRole};
 pub use planet::{terrain_radius_at, chunk_voxel_index, build_chunk_mesh, NoiseCache, PlanetPlugin};
 pub use player::{update_chunk_viewpoint_from_player, PlayerPlugin};
 pub use solar_system::SolarSystemPlugin;
@@ -56,6 +60,8 @@ impl PluginGroup for VoxelPlanetPlugins {
             .add(wildlife::WildlifePlugin)
             .add(structures::StructuresPlugin)
             .add(inventory::InventoryPlugin)
+            .add(character::CharacterPlugin)
+            .add(multiplayer::MultiplayerPlugin)
             .add(hud::HudPlugin)
             .add(world_io::WorldIoPlugin)
     }
