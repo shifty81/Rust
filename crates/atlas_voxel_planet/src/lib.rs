@@ -14,9 +14,11 @@ pub mod biome;
 pub mod components;
 pub mod config;
 pub mod hud;
+pub mod inventory;
 pub mod planet;
 pub mod player;
 pub mod solar_system;
+pub mod structures;
 pub mod vegetation;
 pub mod wildlife;
 pub mod world_io;
@@ -26,9 +28,11 @@ pub use biome::{classify_biome, Biome, Voxel};
 pub use components::*;
 pub use config::*;
 pub use hud::HudPlugin;
+pub use inventory::{Inventory, InventoryPlugin, VoxelRaycastResult};
 pub use planet::{terrain_radius_at, chunk_voxel_index, build_chunk_mesh, NoiseCache, PlanetPlugin};
 pub use player::{update_chunk_viewpoint_from_player, PlayerPlugin};
 pub use solar_system::SolarSystemPlugin;
+pub use structures::StructuresPlugin;
 pub use vegetation::VegetationPlugin;
 pub use wildlife::WildlifePlugin;
 pub use world_io::{SaveWorldRequest, LoadWorldRequest, WorldIoPlugin};
@@ -50,6 +54,8 @@ impl PluginGroup for VoxelPlanetPlugins {
             .add(atmosphere::AtmospherePlugin)
             .add(vegetation::VegetationPlugin)
             .add(wildlife::WildlifePlugin)
+            .add(structures::StructuresPlugin)
+            .add(inventory::InventoryPlugin)
             .add(hud::HudPlugin)
             .add(world_io::WorldIoPlugin)
     }
