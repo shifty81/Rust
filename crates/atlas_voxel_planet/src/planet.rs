@@ -790,8 +790,8 @@ fn generate_chunk_data(
                 // Cave carving: only below a minimum depth so surfaces stay intact.
                 if cave_enabled && depth >= CAVE_MIN_DEPTH {
                     let cave_val = cave_fbm.get([wx as f64, wy as f64, wz as f64]) as f32;
-                    let normalized = (cave_val + 1.0) * 0.5; // map [-1,1] → [0,1]
-                    if normalized > cave_threshold {
+                    let cave_remapped = (cave_val + 1.0) * 0.5; // remap [-1,1] → [0,1]
+                    if cave_remapped > cave_threshold {
                         continue; // leave as Air
                     }
                 }
@@ -866,7 +866,7 @@ fn layer_uv_to_lxyz(face_idx: usize, layer: i32, u: i32, v: i32) -> (i32, i32, i
         0 | 1 => (layer, u, v),
         2 | 3 => (u, layer, v),
         4 | 5 => (u, v, layer),
-        _     => unreachable!(),
+        _     => unreachable!("layer_uv_to_lxyz: invalid face_idx {face_idx}"),
     }
 }
 
