@@ -176,14 +176,13 @@ fn spawn_character_body_once(
         CharacterHead,
     )).id();
 
-    // Arms: pivot at shoulder, mesh centre offset half-way down.
-    let arm_offset = Vec3::new(0.0, -ARM_H * 0.5, 0.0);
+    // Arms: pivot at shoulder, mesh centre at arm midpoint.
     let arm_l = commands.spawn((
         PbrBundle {
             mesh:      meshes.add(Cuboid::new(ARM_W, ARM_H, ARM_W)),
             material:  shirt.clone(),
             transform: Transform::from_translation(
-                Vec3::new(-(TORSO_W * 0.5 + ARM_W * 0.5 + 0.02), ARM_Y, 0.0)
+                Vec3::new(-(TORSO_W * 0.5 + ARM_W * 0.5 + 0.02), ARM_Y - ARM_H * 0.5, 0.0)
             ),
             ..default()
         },
@@ -194,15 +193,14 @@ fn spawn_character_body_once(
             mesh:      meshes.add(Cuboid::new(ARM_W, ARM_H, ARM_W)),
             material:  shirt,
             transform: Transform::from_translation(
-                Vec3::new(TORSO_W * 0.5 + ARM_W * 0.5 + 0.02, ARM_Y, 0.0)
+                Vec3::new(TORSO_W * 0.5 + ARM_W * 0.5 + 0.02, ARM_Y - ARM_H * 0.5, 0.0)
             ),
             ..default()
         },
         CharacterArmRight,
     )).id();
 
-    // Legs: pivot at hip, mesh centre offset half-way down.
-    let leg_offset = Vec3::new(0.0, -LEG_H * 0.5, 0.0);
+    // Legs: mesh centre at leg midpoint.
     let leg_l = commands.spawn((
         PbrBundle {
             mesh:      meshes.add(Cuboid::new(LEG_W, LEG_H, LEG_W)),
@@ -230,10 +228,6 @@ fn spawn_character_body_once(
     commands.entity(player_entity).add_child(body_root);
     // Tag player so this system does not re-run.
     commands.entity(player_entity).insert(CharacterBodyRoot);
-
-    // suppress the unused variable warnings for offset helpers
-    let _ = arm_offset;
-    let _ = leg_offset;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -367,15 +361,13 @@ pub fn update_camera_for_mode(
         }
         CameraMode::ThirdPerson => {
             // Position camera behind and above the player in local space.
-            // Local Z+ = behind the player (player faces -Z in local space).
-            let local_back = Quat::from_rotation_y(0.0) * Vec3::Z;
+            // Local Z+ is behind the player (player faces -Z in local space).
             cam_tf.translation = Vec3::new(0.0, TP_CAMERA_UP, TP_CAMERA_BACK);
             // Look toward the player's head.
             let look_target = Vec3::new(0.0, PLAYER_EYE_HEIGHT, 0.0);
             let dir = (look_target - cam_tf.translation).normalize();
             cam_tf.rotation = Quat::from_rotation_arc(Vec3::NEG_Z, dir)
                 * Quat::from_rotation_x(state.pitch * 0.3);
-            let _ = local_back;
         }
     }
 }

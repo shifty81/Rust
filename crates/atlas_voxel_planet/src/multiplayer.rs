@@ -22,8 +22,7 @@
 //! [16..=19] yaw: f32 LE
 //! [20..=23] pitch: f32 LE
 //! [24..=27] speed: f32 LE   (|velocity|)
-//! [28..=31] padding
-//! ```
+//! [28..=31] padding ```
 //!
 //! No new dependencies are required — only `std::net::UdpSocket`.
 //!
@@ -95,7 +94,7 @@ pub struct NetworkConfig {
     pub remote_host: Option<String>,
     /// 0-based index uniquely identifying this player instance.
     pub player_id:   u8,
-    /// Display name sent in packets (first 12 bytes, ASCII).
+    /// Display name for this player (shown in log messages; not transmitted in packets).
     pub player_name: String,
 }
 
