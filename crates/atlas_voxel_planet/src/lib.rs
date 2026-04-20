@@ -14,8 +14,10 @@ pub mod biome;
 pub mod character;
 pub mod components;
 pub mod config;
+pub mod crafting;
 pub mod hud;
 pub mod inventory;
+pub mod minimap;
 pub mod multiplayer;
 pub mod planet;
 pub mod player;
@@ -30,8 +32,10 @@ pub use biome::{classify_biome, Biome, Voxel};
 pub use character::{CameraMode, CharacterPlugin};
 pub use components::*;
 pub use config::*;
+pub use crafting::{CraftingPlugin, CraftingUiState, Recipe, RECIPES};
 pub use hud::{GroundHudText, HudPlugin, SpaceHudText};
 pub use inventory::{Inventory, InventoryPlugin, VoxelRaycastResult};
+pub use minimap::{MinimapPlugin, MinimapResource};
 pub use multiplayer::{MultiplayerPlugin, NetworkConfig, NetworkRole};
 pub use planet::{terrain_radius_at, chunk_voxel_index, build_chunk_mesh, NoiseCache, PlanetPlugin};
 pub use player::{update_chunk_viewpoint_from_player, update_survival_stats, PlayerPlugin};
@@ -60,9 +64,11 @@ impl PluginGroup for VoxelPlanetPlugins {
             .add(wildlife::WildlifePlugin)
             .add(structures::StructuresPlugin)
             .add(inventory::InventoryPlugin)
+            .add(crafting::CraftingPlugin)
             .add(character::CharacterPlugin)
             .add(multiplayer::MultiplayerPlugin)
             .add(hud::HudPlugin)
+            .add(minimap::MinimapPlugin)
             .add(world_io::WorldIoPlugin)
     }
 }

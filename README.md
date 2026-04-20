@@ -72,6 +72,7 @@ The runtime voxel game is the primary *example scene* shipped inside the editor.
 - **Flight mode** — press **F** to toggle gravity-free 6DoF flight; Shift boosts to 4 000 m/s
 - **Ground HUD** — top-left overlay showing time of day ☀, weather ☁, health ❤ bar, and stamina ⚡ bar
 - **Space HUD** — top-right overlay shown above 8 km: altitude, speed, and nearest body distance
+- **Minimap** — 96 px biome-colour disk (bottom-right); shows player (⚪), creatures (🔴), structures (🟡), north indicator; refreshes every second
 - **PIE HUD** — position, altitude, speed, flight mode, and controls overlay during Play-In-Editor
 
 ### Runtime Controls
@@ -88,6 +89,7 @@ The runtime voxel game is the primary *example scene* shipped inside the editor.
 | **B** | Place active hotbar voxel |
 | **1–9** | Select hotbar slot |
 | **Scroll wheel** | Cycle hotbar slot |
+| **C** | Open / close crafting panel |
 | **Escape** | Release / lock cursor |
 
 ---
@@ -121,23 +123,33 @@ Up to 20 creatures spawn biome-appropriately within 80 m of the player and despa
 
 | Creature | Biome |
 |----------|-------|
-| Deer | Forest / Tropical Forest |
-| Rabbit | Plains / Savanna |
-| Wolf | Tundra |
-| Lizard | Desert |
-| Penguin | Arctic |
-| Yak | Mountain / Snow Peak |
+| Deer | Forest / Tropical Forest / Plains / Savanna |
+| Rabbit | Forest / Tropical Forest / Plains / Savanna |
+| Camel | Desert |
+| Polar Bear | Arctic / Tundra |
 
 Creatures wander the surface using a simple AI: random heading changes, surface-following movement along the planet normal.
 
 ---
 
-## 🏗️ Inventory & Building
+## 🏗️ Inventory, Building & Crafting
 
 - **9-slot hotbar** — cycle with 1–9 keys or mouse wheel; holds any breakable voxel type
 - **G** — mine/break the voxel the player is looking at (ray march up to 6 m)
 - **B** — place the active-slot voxel type at the targeted face
 - **Hotbar HUD** — bottom-screen row of slot boxes showing voxel type and count
+- **C** — open / close the crafting panel
+
+### ⚒ Crafting Recipes
+
+| Recipe | Ingredients | Output |
+|--------|------------|--------|
+| Compressed Stone | 3× Gravel | 2× Stone |
+| Sandstone Slab | 3× Sand | 2× Sandstone |
+| Rich Soil | 2× Dirt | 1× Grass |
+| Crystal Refinement | 3× Obsidian | 1× Crystal |
+| Stone Bricks | 2× Stone + 1× Gravel | 3× Sandstone |
+| Snow Pack | 2× Snow + 1× Crystal | 2× Ice |
 
 ---
 
@@ -266,9 +278,11 @@ crates/
 │   ├── src/vegetation.rs       —   Procedural tree / grass spawning
 │   ├── src/wildlife.rs         —   Creature AI spawning (biome-matched, wander)
 │   ├── src/inventory.rs        —   Hotbar, voxel break/place (G/B), HUD
+│   ├── src/crafting.rs         —   C-key crafting panel, recipe list, ingredient/output transfers
 │   ├── src/structures.rs       —   Procedural huts, towers, ruins
 │   ├── src/multiplayer.rs      —   LAN UDP host/client, RemotePlayer sync
 │   ├── src/hud.rs              —   Ground HUD (time/weather/health/stamina) + Space HUD
+│   ├── src/minimap.rs          —   64×64 dynamic biome-colour minimap texture
 │   ├── src/world_io.rs         —   Binary .voxelworld save / load
 │   └── src/config.rs           —   All tunable constants
 │
@@ -319,9 +333,9 @@ project/                        — Editor project directory (scenes, prefabs, c
 
 **Future ideas:**
 
-- Crafting system (recipe-based item combining)
+- ~~Crafting system (recipe-based item combining)~~ ✅ implemented (`crafting.rs`)
+- ~~Minimap overlay~~ ✅ implemented (`minimap.rs`)
 - NPC dialogue / quest system
 - Dedicated server mode (authoritative host, client-side prediction)
 - glTF character model swap (replace procedural body with an animated mesh)
-- Minimap overlay
 - Biome-specific ambient audio
