@@ -113,8 +113,11 @@ fn setup_solar_system(
     }
 
     commands.insert_resource(AmbientLight {
-        color:      Color::srgb(0.05, 0.05, 0.12),
-        brightness: 40.0,
+        // Night-side fill light.  Raised from 40 → 260 so terrain on the
+        // planet's dark side is legible (was rendering near-black, which
+        // together with missing assets read as "everything is broken").
+        color:      Color::srgb(0.22, 0.28, 0.40),
+        brightness: 260.0,
     });
 }
 

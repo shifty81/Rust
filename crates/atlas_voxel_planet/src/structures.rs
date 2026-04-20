@@ -131,7 +131,10 @@ pub fn spawn_structures_around_player(
 
         let Some(kind) = structure_for_biome(biome, &mut rng) else { continue };
 
-        let pos = cand_dir * surface_r; // base sits at the terrain surface
+        // Lift the structure base by one voxel so it sits on top of the
+        // highest solid voxel column rather than embedded in it (chunk
+        // generation fills up to `surface_r + VOXEL_SIZE`).
+        let pos = cand_dir * (surface_r + VOXEL_SIZE);
         spawn_structure(&mut commands, &mut meshes, &mut materials, pos, cand_dir, kind, &mut rng);
         spawned += 1;
     }

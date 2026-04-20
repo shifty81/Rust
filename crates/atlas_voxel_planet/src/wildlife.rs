@@ -63,7 +63,10 @@ pub struct CreatureAI {
 
 /// Small upward offset (metres) added to the terrain radius when placing a
 /// creature so feet don't clip the surface.
-const CREATURE_SURFACE_OFFSET: f32 = 0.02;
+/// Offset above the analytical terrain radius at which creatures are placed.
+/// Chunks fill voxels up to `terrain_r + VOXEL_SIZE`, so this must clear a
+/// full voxel plus a small fudge or creatures clip into the top block.
+const CREATURE_SURFACE_OFFSET: f32 = VOXEL_SIZE + 0.02;
 /// Maximum number of creatures allowed near the player at once.
 const MAX_CREATURES: usize = 20;
 /// Radius (m) within which creatures are kept alive.

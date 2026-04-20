@@ -102,6 +102,13 @@ pub const SPAWN_HEIGHT: f32 = 5.0;
 pub const MAX_PITCH: f32 = 1.5;
 
 /// Small clearance (metres) between the player's feet and the terrain surface.
+///
+/// Note: chunk generation (see `planet::generate_chunk_voxels`) treats a voxel
+/// as solid whenever `dist <= terrain_r + VOXEL_SIZE`, so the real top of the
+/// highest column of solid voxels sits up to `VOXEL_SIZE` *above* the
+/// analytical terrain radius returned by [`terrain_radius_at`].  To avoid
+/// clipping the camera / body into that top voxel, the spawn code and gravity
+/// landing use `terrain_r + VOXEL_SIZE + PLAYER_FOOT_CLEARANCE`.
 pub const PLAYER_FOOT_CLEARANCE: f32 = 0.05;
 
 /// Flight speed in free-fly mode (m/s).

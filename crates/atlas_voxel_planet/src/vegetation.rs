@@ -88,25 +88,25 @@ fn spawn_vegetation_around_player(
             match biome {
                 Biome::Forest | Biome::TropicalForest => {
                     if rng.gen_range(0.0f32..1.0) < tree_prob_forest {
-                        let pos = cand_dir * (surface_r + 0.5);
+                        let pos = cand_dir * (surface_r + VOXEL_SIZE);
                         spawn_tree(&mut commands, &mut meshes, &mut materials, pos, cand_dir, TreeKind::Broadleaf, &mut rng);
                     }
                 }
                 Biome::Plains | Biome::Savanna => {
                     if rng.gen_range(0.0f32..1.0) < tree_prob_plains {
-                        let pos = cand_dir * (surface_r + 0.5);
+                        let pos = cand_dir * (surface_r + VOXEL_SIZE);
                         spawn_tree(&mut commands, &mut meshes, &mut materials, pos, cand_dir, TreeKind::Oak, &mut rng);
                     }
                 }
                 Biome::Desert => {
                     if rng.gen_range(0.0f32..1.0) < tree_prob_desert {
-                        let pos = cand_dir * (surface_r + 0.5);
+                        let pos = cand_dir * (surface_r + VOXEL_SIZE);
                         spawn_tree(&mut commands, &mut meshes, &mut materials, pos, cand_dir, TreeKind::Cactus, &mut rng);
                     }
                 }
                 Biome::Tundra => {
                     if rng.gen_range(0.0f32..1.0) < tree_prob_tundra {
-                        let pos = cand_dir * (surface_r + 0.5);
+                        let pos = cand_dir * (surface_r + VOXEL_SIZE);
                         spawn_tree(&mut commands, &mut meshes, &mut materials, pos, cand_dir, TreeKind::Pine, &mut rng);
                     }
                 }
@@ -118,7 +118,7 @@ fn spawn_vegetation_around_player(
             match biome {
                 Biome::Plains | Biome::Forest | Biome::TropicalForest | Biome::Savanna => {
                     if rng.gen_range(0.0f32..1.0) < grass_chance {
-                        let pos = cand_dir * (surface_r + 0.02);
+                        let pos = cand_dir * (surface_r + VOXEL_SIZE + 0.02);
                         spawn_grass(&mut commands, &mut meshes, &mut materials, pos, cand_dir, &mut rng);
                     }
                 }

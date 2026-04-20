@@ -28,6 +28,8 @@
 
 use bevy::audio::{PlaybackMode, Volume};
 use bevy::prelude::*;
+use std::collections::HashSet;
+use std::path::Path;
 
 use crate::biome::{classify_biome, Biome};
 use crate::components::*;
@@ -103,6 +105,10 @@ pub struct AmbientAudioState {
     pub master_volume: f32,
     /// How often (in seconds) to re-sample the player's biome.
     pub sample_timer: f32,
+    /// Asset paths we have already tried and found to be missing on disk.
+    /// Used to suppress repeated `Path not found` errors from the asset server
+    /// when the project hasn't shipped biome audio yet.
+    pub missing_paths: HashSet<&'static str>,
 }
 
 impl Default for AmbientAudioState {
@@ -116,6 +122,7 @@ impl Default for AmbientAudioState {
             pending_track: AmbientTrack::None,
             master_volume: 0.35,
             sample_timer:  0.0,
+            missing_paths: HashSet::new(),
         }
     }
 }
@@ -269,6 +276,26 @@ fn start_track(
     state:        &mut AmbientAudioState,
 ) {
     let Some(path) = state.current_track.path() else { return };
+
+    // If a previous attempt found no file on disk, silently skip rather than
+    // ask the `AssetServer` to re-load it (which prints a red `ERROR …
+    // Path not found` line every time).
+    if state.missing_paths.contains(path) {
+        return;
+    }
+
+    // Bevy's `AssetServer` resolves paths relative to its configured asset
+    // root (default: `./assets/`).  If the file isn't there, we record the
+    // miss once and never try again — the audio track simply stays silent.
+    let expected = Path::new("assets").join(path);
+    if !expected.exists() {
+        info!(
+            "ambient audio: '{}' not found on disk — biome track will be silent",
+            expected.display()
+        );
+        state.missing_paths.insert(path);
+        return;
+    }
 
     let handle: Handle<AudioSource> = asset_server.load(path);
     let entity = commands.spawn((

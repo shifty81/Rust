@@ -422,7 +422,9 @@ pub fn spawn_npcs_around_player(
 
         let Some((kind, _, quest_idx)) = npc_for_biome(biome, &mut rng) else { continue };
 
-        let pos = cand_dir * (surface_r + 0.05);
+        // Clear the topmost voxel column (chunk fill extends to
+        // `surface_r + VOXEL_SIZE`) so NPC feet sit on the block, not in it.
+        let pos = cand_dir * (surface_r + VOXEL_SIZE + 0.05);
         spawn_npc(&mut commands, &mut meshes, &mut materials, pos, cand_dir, kind,
                   npc_dialogue(quest_idx));
         spawned += 1;

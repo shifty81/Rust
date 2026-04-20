@@ -35,7 +35,12 @@ impl Plugin for PlayerPlugin {
 pub fn spawn_voxel_player(commands: &mut Commands, seed: u32) {
     let surface_up = Vec3::Y;
     let surface_r  = terrain_radius_at(surface_up, seed);
-    let spawn_pos  = surface_up * (surface_r + PLAYER_EYE_HEIGHT + SPAWN_HEIGHT);
+    // The top of the highest solid voxel column sits at `surface_r + VOXEL_SIZE`
+    // (see `PLAYER_FOOT_CLEARANCE` docs); spawn SPAWN_HEIGHT metres above that
+    // so the capsule drops onto the voxel top cleanly instead of settling
+    // inside it on the first frame.
+    let spawn_pos  = surface_up
+        * (surface_r + VOXEL_SIZE + PLAYER_FOOT_CLEARANCE + PLAYER_EYE_HEIGHT + SPAWN_HEIGHT);
 
     let player = commands
         .spawn((
@@ -224,7 +229,10 @@ pub fn apply_gravity(
 
     let new_up    = new_pos / new_dist;
     let terrain_r = terrain_radius_at(new_up, seed.0);
-    let feet_r    = terrain_r + PLAYER_FOOT_CLEARANCE;
+    // The topmost solid voxel extends up to `terrain_r + VOXEL_SIZE` (see
+    // `PLAYER_FOOT_CLEARANCE` docs).  Snap the feet to that top surface so
+    // the capsule is not embedded in the block the player is standing on.
+    let feet_r    = terrain_r + VOXEL_SIZE + PLAYER_FOOT_CLEARANCE;
 
     if new_dist < feet_r {
         // Compute the inward radial speed just before landing.
