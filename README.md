@@ -21,12 +21,14 @@ The runtime voxel game is the primary *example scene* shipped inside the editor.
 
 - **1/128th Earth scale** — radius ≈ 49 773 m; curvature imperceptible while walking
 - **Procedural terrain** — multi-octave FBM Perlin noise projected onto a sphere
+- **Greedy meshing** — adjacent same-type faces merged per 2-D slice; vertex AO baked at mesh time
 - **Planet overview mesh** — colour-per-vertex UV sphere (180 × 360 segments, ~65 k vertices) visible from orbit
 - **Chunk-based voxel terrain** — 16³ voxel chunks generated asynchronously; nearest chunks prioritised; only terrain within render-distance is kept in memory
 - **Vertex ambient occlusion** — per-vertex AO baked at mesh time for natural-looking crevice shading with no extra draw calls
-- **Ocean sphere** — semi-transparent blue sphere at sea level visible from low orbit
+- **Ocean sphere** — animated wave mesh at sea level; sine-displaced UV sphere rebuilt every other frame
+- **Caves** — 3-D FBM noise carved at depth ≥ 4 voxels below the surface
 
-### 🌱 Biomes (12 types)
+### 🌱 Biomes (15 types)
 
 | Biome | Surface voxels |
 |-------|----------------|
@@ -42,6 +44,9 @@ The runtime voxel game is the primary *example scene* shipped inside the editor.
 | Arctic | Snow / Ice / Stone |
 | Mountain | Rock / Stone |
 | Snow Peak | Snow / Rock |
+| **Underground — Crystal** | Crystal voxel (polar biomes, depth ≥ 25) |
+| **Underground — Magma** | Magma voxel (warm biomes, depth ≥ 25) |
+| **Underground — Obsidian** | Obsidian voxel (warm biomes, depth ≥ 25) |
 
 ---
 
@@ -59,11 +64,31 @@ The runtime voxel game is the primary *example scene* shipped inside the editor.
 ## 🕹️ Character / Player
 
 - **First-person controller** — WASD + mouse-look
+- **Third-person mode** — press **V** to toggle; procedural character body (torso, head, arms, legs) with limb-swing and idle-breathing animations
 - **Spherical gravity** — always pulls toward the planet centre
 - **Surface orientation** — the player's local "up" tracks the planet normal anywhere on the globe
 - Jump (Space) and sprint (Shift)
+- **Survival stats** — Health (0–100) and Stamina (0–100); sprint drains stamina; fall damage on hard landings; both regenerate over time
 - **Flight mode** — press **F** to toggle gravity-free 6DoF flight; Shift boosts to 4 000 m/s
+- **Ground HUD** — top-left overlay showing time of day ☀, weather ☁, health ❤ bar, and stamina ⚡ bar
+- **Space HUD** — top-right overlay shown above 8 km: altitude, speed, and nearest body distance
 - **PIE HUD** — position, altitude, speed, flight mode, and controls overlay during Play-In-Editor
+
+### Runtime Controls
+
+| Input | Action |
+|-------|--------|
+| **WASD / Arrows** | Move |
+| **Mouse** | Look |
+| **Shift** | Sprint (drains stamina) |
+| **Space** | Jump |
+| **F** | Toggle flight mode |
+| **V** | Toggle first/third-person camera |
+| **G** | Break voxel (adds to hotbar) |
+| **B** | Place active hotbar voxel |
+| **1–9** | Select hotbar slot |
+| **Scroll wheel** | Cycle hotbar slot |
+| **Escape** | Release / lock cursor |
 
 ---
 
@@ -87,6 +112,69 @@ Procedurally placed around the camera, despawned when out of range:
 | Pine tree | Tundra |
 | Cactus (with arms) | Desert |
 | Grass blades | Plains / Forest / Tropical Forest / Savanna |
+
+---
+
+## 🐾 Wildlife
+
+Up to 20 creatures spawn biome-appropriately within 80 m of the player and despawn when out of range:
+
+| Creature | Biome |
+|----------|-------|
+| Deer | Forest / Tropical Forest |
+| Rabbit | Plains / Savanna |
+| Wolf | Tundra |
+| Lizard | Desert |
+| Penguin | Arctic |
+| Yak | Mountain / Snow Peak |
+
+Creatures wander the surface using a simple AI: random heading changes, surface-following movement along the planet normal.
+
+---
+
+## 🏗️ Inventory & Building
+
+- **9-slot hotbar** — cycle with 1–9 keys or mouse wheel; holds any breakable voxel type
+- **G** — mine/break the voxel the player is looking at (ray march up to 6 m)
+- **B** — place the active-slot voxel type at the targeted face
+- **Hotbar HUD** — bottom-screen row of slot boxes showing voxel type and count
+
+---
+
+## 🏰 Procedural Structures
+
+Up to 8 structures spawn biome-appropriately around the player and despawn when out of range:
+
+| Structure | Biome |
+|-----------|-------|
+| Hut | Forest / Plains |
+| Sandstone Hut | Desert |
+| Watch Tower | Savanna / Mountain |
+| Ice Hut | Arctic / Snow Peak |
+| Ruin | Any land biome |
+
+---
+
+## 🌐 Multiplayer (LAN)
+
+Basic LAN co-op over a non-blocking UDP socket.  No extra dependencies required.
+
+Configure `NetworkConfig` before the app starts:
+
+```rust
+app.insert_resource(NetworkConfig {
+    role:        NetworkRole::Host,   // or Client / Offline
+    port:        7777,
+    remote_host: None,                // Some("192.168.x.x") for Client
+    player_id:   0,
+    ..default()
+});
+```
+
+- **Host** — binds `0.0.0.0:7777`; relays all player-state packets to every known peer
+- **Client** — connects to the host; sends its own state; receives relayed states
+- Fixed 32-byte wire format: position, yaw, pitch, speed, is_flying
+- Remote players rendered as a simple procedural body; stale peers despawned after 5 s of silence
 
 ---
 
@@ -169,12 +257,18 @@ crates/
 ├── atlas_runtime_app/          — Standalone runtime executable
 │
 ├── atlas_voxel_planet/         — Core voxel planet engine
-│   ├── src/planet.rs           —   Async chunk generation, AO mesher, noise cache
-│   ├── src/biome.rs            —   Biome classification, voxel palette, surface colours
+│   ├── src/planet.rs           —   Async chunk generation, greedy AO mesher, cave FBM, noise cache
+│   ├── src/biome.rs            —   Biome classification, voxel palette, underground biomes
 │   ├── src/solar_system.rs     —   Sun, moon, planets, orbital mechanics
-│   ├── src/player.rs           —   First-person controller, spherical gravity
+│   ├── src/player.rs           —   First-person controller, spherical gravity, health/stamina
+│   ├── src/character.rs        —   Third-person body (V key), procedural animations
 │   ├── src/atmosphere.rs       —   Day/night sky, weather, precipitation
 │   ├── src/vegetation.rs       —   Procedural tree / grass spawning
+│   ├── src/wildlife.rs         —   Creature AI spawning (biome-matched, wander)
+│   ├── src/inventory.rs        —   Hotbar, voxel break/place (G/B), HUD
+│   ├── src/structures.rs       —   Procedural huts, towers, ruins
+│   ├── src/multiplayer.rs      —   LAN UDP host/client, RemotePlayer sync
+│   ├── src/hud.rs              —   Ground HUD (time/weather/health/stamina) + Space HUD
 │   ├── src/world_io.rs         —   Binary .voxelworld save / load
 │   └── src/config.rs           —   All tunable constants
 │
@@ -213,12 +307,21 @@ project/                        — Editor project directory (scenes, prefabs, c
 
 ## 🛣 Planned / Future Work
 
-- Wildlife AI and ecosystem simulation
-- Water physics (rivers, oceans with waves)
-- Caves and underground biomes
-- Space flight / inter-planetary travel
-- Inventory and building system
-- Multiplayer
-- Third-person character model with animations
-- Procedural city / structure generation
-- Greedy meshing to further reduce chunk triangle count
+- ~~Wildlife AI and ecosystem simulation~~ ✅ implemented (`wildlife.rs`)
+- ~~Water physics (rivers, oceans with waves)~~ ✅ implemented (animated ocean mesh)
+- ~~Caves and underground biomes~~ ✅ implemented (FBM cave carving + Crystal/Magma/Obsidian voxels)
+- ~~Space flight / inter-planetary travel~~ ✅ implemented (flight mode, space HUD, orbital bodies)
+- ~~Inventory and building system~~ ✅ implemented (`inventory.rs` — G/B break/place, hotbar HUD)
+- ~~Multiplayer~~ ✅ implemented (`multiplayer.rs` — LAN UDP host/client)
+- ~~Third-person character model with animations~~ ✅ implemented (`character.rs` — V key toggle, procedural body)
+- ~~Procedural city / structure generation~~ ✅ implemented (`structures.rs` — huts, towers, ruins)
+- ~~Greedy meshing to further reduce chunk triangle count~~ ✅ implemented (`planet.rs`)
+
+**Future ideas:**
+
+- Crafting system (recipe-based item combining)
+- NPC dialogue / quest system
+- Dedicated server mode (authoritative host, client-side prediction)
+- glTF character model swap (replace procedural body with an animated mesh)
+- Minimap overlay
+- Biome-specific ambient audio

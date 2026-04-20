@@ -90,6 +90,16 @@ pub struct PlayerState {
     /// True while the player is in free-fly / space-flight mode.
     /// Gravity and surface alignment are disabled; movement follows camera look.
     pub is_flying: bool,
+
+    // ── Survival stats ───────────────────────────────────────────────────────
+    /// Current health points (0 – `PLAYER_MAX_HEALTH`).
+    pub health: f32,
+    /// Current stamina points (0 – `PLAYER_MAX_STAMINA`).
+    /// Drained while sprinting; regenerates while walking or standing still.
+    pub stamina: f32,
+    /// Radial (outward) velocity component recorded at the start of the
+    /// previous frame, used to detect hard landings for fall damage.
+    pub prev_radial_velocity: f32,
 }
 
 impl Default for PlayerState {
@@ -101,6 +111,9 @@ impl Default for PlayerState {
             is_grounded: false,
             grounded_timer: 0.0,
             is_flying: false,
+            health: 100.0,
+            stamina: 100.0,
+            prev_radial_velocity: 0.0,
         }
     }
 }
