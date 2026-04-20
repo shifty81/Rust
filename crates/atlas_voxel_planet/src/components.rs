@@ -150,6 +150,19 @@ pub struct ChunkInfo {
 //  RESOURCES
 // ============================================================
 
+/// Handle to the animated ocean mesh and its current wave phase.
+///
+/// Stored as a resource so that [`animate_ocean_waves`] can locate the mesh
+/// asset each frame without querying the ocean entity.
+#[derive(Resource)]
+pub struct OceanWaves {
+    /// Handle to the [`bevy::render::mesh::Mesh`] asset used by the ocean entity.
+    pub mesh_handle: Handle<Mesh>,
+    /// Accumulated wave phase (radians).  Advances every frame by
+    /// `OCEAN_WAVE_SPEED * delta_seconds`.
+    pub phase: f32,
+}
+
 /// Tracks simulation time (day/night cycle, seasons, etc.).
 #[derive(Resource)]
 pub struct WorldTime {

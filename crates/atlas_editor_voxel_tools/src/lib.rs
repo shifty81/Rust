@@ -192,6 +192,9 @@ const ALL_VOXELS: &[Voxel] = &[
     Voxel::Snow,
     Voxel::Ice,
     Voxel::Water,
+    Voxel::Crystal,
+    Voxel::Magma,
+    Voxel::Obsidian,
     Voxel::Air,
 ];
 
@@ -207,6 +210,9 @@ fn voxel_display_name(v: Voxel) -> &'static str {
         Voxel::Snow       => "Snow",
         Voxel::Ice        => "Ice",
         Voxel::Water      => "Water",
+        Voxel::Crystal    => "Crystal",
+        Voxel::Magma      => "Magma",
+        Voxel::Obsidian   => "Obsidian",
         Voxel::Air        => "Air (erase)",
     }
 }
@@ -224,6 +230,9 @@ fn voxel_egui_color(v: Voxel) -> egui::Color32 {
         Voxel::Snow       => egui::Color32::from_rgb(240, 240, 250),
         Voxel::Ice        => egui::Color32::from_rgb(160, 210, 230),
         Voxel::Water      => egui::Color32::from_rgb(50,  120, 200),
+        Voxel::Crystal    => egui::Color32::from_rgb(140, 100, 230),
+        Voxel::Magma      => egui::Color32::from_rgb(235, 80,  15),
+        Voxel::Obsidian   => egui::Color32::from_rgb(30,  25,  45),
         Voxel::Air        => egui::Color32::from_rgb(40,  40,  40),
     }
 }

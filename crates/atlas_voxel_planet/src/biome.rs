@@ -31,6 +31,12 @@ pub enum Voxel {
     Water = 8,
     Gravel = 9,
     Rock = 10,
+    /// Purple-blue crystalline formations found in deep polar/tundra zones.
+    Crystal = 11,
+    /// Glowing orange-red molten rock found deep beneath warm/equatorial zones.
+    Magma = 12,
+    /// Dark volcanic glass found at intermediate depths in warm zones.
+    Obsidian = 13,
 }
 
 impl Voxel {
@@ -57,6 +63,9 @@ impl Voxel {
             8  => Self::Water,
             9  => Self::Gravel,
             10 => Self::Rock,
+            11 => Self::Crystal,
+            12 => Self::Magma,
+            13 => Self::Obsidian,
             _  => Self::Air,
         }
     }
@@ -75,6 +84,9 @@ impl Voxel {
             Voxel::Water     => [0.10, 0.40, 0.80, 0.75],
             Voxel::Gravel    => [0.50, 0.48, 0.45, 1.0],
             Voxel::Rock      => [0.35, 0.33, 0.30, 1.0],
+            Voxel::Crystal   => [0.55, 0.40, 0.90, 1.0],
+            Voxel::Magma     => [0.92, 0.30, 0.05, 1.0],
+            Voxel::Obsidian  => [0.12, 0.10, 0.18, 1.0],
         }
     }
 }
@@ -128,7 +140,17 @@ pub fn biome_surface_color(biome: Biome, altitude: f32) -> [f32; 4] {
 }
 
 /// Choose what voxel material to place given biome and depth below surface.
+///
+/// At shallow depths (0–24 voxels) standard surface and sub-surface materials
+/// are used.  At depth ≥ 25, the biome's underground character takes over:
+/// warm / equatorial zones reveal volcanic Obsidian and Magma; cold / polar
+/// zones grow Crystal formations; temperate/mountain zones stay Stone.
 pub fn voxel_for_depth(biome: Biome, depth: u32) -> Voxel {
+    // ── Deep underground biome override ──────────────────────────────────────
+    if depth >= 25 {
+        return underground_voxel(biome, depth);
+    }
+
     match biome {
         Biome::DeepOcean | Biome::ShallowOcean => match depth {
             0        => Voxel::Gravel,
@@ -167,5 +189,24 @@ pub fn voxel_for_depth(biome: Biome, depth: u32) -> Voxel {
             1..=3    => Voxel::Dirt,
             _        => Voxel::Stone,
         },
+    }
+}
+
+/// Underground material selection for depth ≥ 25.
+///
+/// Warm/equatorial zones get volcanic formations (Obsidian → Magma); polar
+/// zones get Crystal; everything else stays Stone.
+fn underground_voxel(biome: Biome, depth: u32) -> Voxel {
+    match biome {
+        Biome::Desert
+        | Biome::Savanna
+        | Biome::TropicalForest
+        | Biome::Beach
+        | Biome::ShallowOcean
+        | Biome::DeepOcean => {
+            if depth > 50 { Voxel::Magma } else { Voxel::Obsidian }
+        }
+        Biome::Arctic | Biome::Tundra | Biome::SnowPeak => Voxel::Crystal,
+        _ => Voxel::Stone,
     }
 }

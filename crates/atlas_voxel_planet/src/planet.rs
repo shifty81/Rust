@@ -108,6 +108,7 @@ impl Plugin for PlanetPlugin {
             .add_systems(
                 Update,
                 (
+                    animate_ocean_waves,
                     rebuild_noise_on_settings_change,
                     handle_regen_world,
                     unload_distant_chunks,
@@ -187,11 +188,14 @@ fn setup_planet(
     ));
 
     // ── Ocean / sea-level sphere ─────────────────────────────────────────────
-    // A slightly-transparent sphere at exactly sea-level radius.  Blended on
-    // top of the planet overview so shallow oceans and beaches show beneath.
+    // A slightly-transparent animated sphere at exactly sea-level radius.
+    // The mesh is rebuilt every frame with sine-wave vertex displacement to
+    // give the appearance of ocean waves.
+    let ocean_mesh_handle = meshes.add(build_ocean_mesh(0.0));
+    commands.insert_resource(OceanWaves { mesh_handle: ocean_mesh_handle.clone(), phase: 0.0 });
     commands.spawn((
         PbrBundle {
-            mesh: meshes.add(Sphere::new(SEA_LEVEL).mesh().uv(64, 32)),
+            mesh: ocean_mesh_handle,
             material: materials.add(StandardMaterial {
                 base_color: Color::srgba(0.04, 0.22, 0.62, 0.72),
                 alpha_mode: AlphaMode::Blend,
@@ -282,6 +286,87 @@ fn build_planet_mesh(seed: u32, max_terrain_height: f32) -> Mesh {
     mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR,    colors);
     mesh.insert_indices(Indices::U32(indices));
     mesh
+}
+
+// ---------------------------------------------------------------------------
+//  Animated ocean mesh
+// ---------------------------------------------------------------------------
+
+/// Build a UV-sphere mesh at sea level with per-vertex sine-wave displacement.
+///
+/// `phase` is the current wave phase in radians; it advances each frame by
+/// `OCEAN_WAVE_SPEED * delta_seconds`.  A low-resolution grid
+/// (`OCEAN_WAVE_SEGMENTS_LAT × OCEAN_WAVE_SEGMENTS_LON`) keeps the per-frame
+/// rebuild cheap while still producing clearly visible wave crests.
+fn build_ocean_mesh(phase: f32) -> Mesh {
+    let lat_segs = OCEAN_WAVE_SEGMENTS_LAT;
+    let lon_segs = OCEAN_WAVE_SEGMENTS_LON;
+
+    let vert_count = ((lat_segs + 1) * (lon_segs + 1)) as usize;
+    let mut positions: Vec<[f32; 3]> = Vec::with_capacity(vert_count);
+    let mut normals:   Vec<[f32; 3]> = Vec::with_capacity(vert_count);
+    let mut uvs:       Vec<[f32; 2]> = Vec::with_capacity(vert_count);
+
+    for lat_i in 0..=lat_segs {
+        let v   = lat_i as f32 / lat_segs as f32;
+        let phi = PI * (v - 0.5);
+
+        for lon_i in 0..=lon_segs {
+            let u     = lon_i as f32 / lon_segs as f32;
+            let theta = 2.0 * PI * u;
+
+            let nx = phi.cos() * theta.cos();
+            let ny = phi.sin();
+            let nz = phi.cos() * theta.sin();
+
+            // Two-frequency sine wave on the sphere surface.
+            let wave = OCEAN_WAVE_AMPLITUDE
+                * ((OCEAN_WAVE_FREQ * theta + phase).sin()
+                    * (OCEAN_WAVE_FREQ * 0.6 * phi + phase * 0.7).cos());
+
+            let r = SEA_LEVEL + wave;
+            positions.push([nx * r, ny * r, nz * r]);
+            normals.push([nx, ny, nz]);
+            uvs.push([u, v]);
+        }
+    }
+
+    let mut indices: Vec<u32> = Vec::with_capacity((lat_segs * lon_segs * 6) as usize);
+    for lat_i in 0..lat_segs {
+        for lon_i in 0..lon_segs {
+            let row = lon_segs + 1;
+            let v0  = lat_i * row + lon_i;
+            let v1  = v0 + 1;
+            let v2  = v0 + row;
+            let v3  = v2 + 1;
+            indices.extend_from_slice(&[v0, v2, v1, v1, v2, v3]);
+        }
+    }
+
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+    );
+    mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL,   normals);
+    mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0,     uvs);
+    mesh.insert_indices(Indices::U32(indices));
+    mesh
+}
+
+/// Advance the ocean wave phase and rebuild the ocean mesh in-place.
+fn animate_ocean_waves(
+    time:       Res<Time>,
+    mut waves:  ResMut<OceanWaves>,
+    mut meshes: ResMut<Assets<Mesh>>,
+) {
+    waves.phase += OCEAN_WAVE_SPEED * time.delta_seconds();
+    // Keep phase in a reasonable range to avoid float precision creep.
+    waves.phase %= 2.0 * PI;
+
+    if let Some(mesh) = meshes.get_mut(&waves.mesh_handle) {
+        *mesh = build_ocean_mesh(waves.phase);
+    }
 }
 
 // ---------------------------------------------------------------------------

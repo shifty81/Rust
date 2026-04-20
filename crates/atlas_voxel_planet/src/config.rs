@@ -165,3 +165,22 @@ pub const CAVE_THRESHOLD: f32 = 0.65;
 /// Minimum voxel depth below the terrain surface before caves can appear (voxels).
 /// Prevents caves from breaking through to the surface.
 pub const CAVE_MIN_DEPTH: u32 = 4;
+
+// ============================================================
+//  OCEAN WAVE CONFIGURATION
+// ============================================================
+
+/// Latitude (ring) segments for the animated ocean mesh.
+pub const OCEAN_WAVE_SEGMENTS_LAT: u32 = 32;
+
+/// Longitude (column) segments for the animated ocean mesh.
+pub const OCEAN_WAVE_SEGMENTS_LON: u32 = 64;
+
+/// Peak-to-trough wave amplitude (metres).
+pub const OCEAN_WAVE_AMPLITUDE: f32 = 0.6;
+
+/// Wave angular frequency — how many crests fit around a great circle.
+pub const OCEAN_WAVE_FREQ: f32 = 7.0;
+
+/// Wave phase advance rate (radians per second of real time).
+pub const OCEAN_WAVE_SPEED: f32 = 0.35;
