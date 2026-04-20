@@ -161,6 +161,9 @@ pub struct OceanWaves {
     /// Accumulated wave phase (radians).  Advances every frame by
     /// `OCEAN_WAVE_SPEED * delta_seconds`.
     pub phase: f32,
+    /// Frame counter used to skip mesh rebuilds; the mesh is only rebuilt
+    /// every other frame to halve the CPU cost.
+    pub frame_skip: u8,
 }
 
 /// Tracks simulation time (day/night cycle, seasons, etc.).

@@ -192,7 +192,7 @@ fn setup_planet(
     // The mesh is rebuilt every frame with sine-wave vertex displacement to
     // give the appearance of ocean waves.
     let ocean_mesh_handle = meshes.add(build_ocean_mesh(0.0));
-    commands.insert_resource(OceanWaves { mesh_handle: ocean_mesh_handle.clone(), phase: 0.0 });
+    commands.insert_resource(OceanWaves { mesh_handle: ocean_mesh_handle.clone(), phase: 0.0, frame_skip: 0 });
     commands.spawn((
         PbrBundle {
             mesh: ocean_mesh_handle,
@@ -355,6 +355,9 @@ fn build_ocean_mesh(phase: f32) -> Mesh {
 }
 
 /// Advance the ocean wave phase and rebuild the ocean mesh in-place.
+///
+/// The mesh is only rebuilt every other frame to halve the CPU cost while
+/// keeping wave motion visually smooth.
 fn animate_ocean_waves(
     time:       Res<Time>,
     mut waves:  ResMut<OceanWaves>,
@@ -364,8 +367,14 @@ fn animate_ocean_waves(
     // Keep phase in a reasonable range to avoid float precision creep.
     waves.phase %= 2.0 * PI;
 
-    if let Some(mesh) = meshes.get_mut(&waves.mesh_handle) {
-        *mesh = build_ocean_mesh(waves.phase);
+    waves.frame_skip = waves.frame_skip.wrapping_add(1);
+    if waves.frame_skip % 2 != 0 {
+        return;
+    }
+
+    match meshes.get_mut(&waves.mesh_handle) {
+        Some(mesh) => *mesh = build_ocean_mesh(waves.phase),
+        None => warn!("animate_ocean_waves: ocean mesh asset not found; wave animation skipped"),
     }
 }
 
@@ -951,7 +960,7 @@ fn layer_uv_to_lxyz(face_idx: usize, layer: i32, u: i32, v: i32) -> (i32, i32, i
         0 | 1 => (layer, u, v),
         2 | 3 => (u, layer, v),
         4 | 5 => (u, v, layer),
-        _     => unreachable!("layer_uv_to_lxyz: invalid face_idx {face_idx}"),
+        _     => unreachable!("layer_uv_to_lxyz: invalid face_idx {}", face_idx),
     }
 }
 
