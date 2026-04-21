@@ -23,7 +23,6 @@ members = [
     "crates/atlas_editor_project",
     "crates/atlas_editor_world_settings",
     "crates/atlas_editor_voxel_tools",
-    "crates/atlas_runtime_app",
     "crates/atlas_editor_app",
 ]
 

@@ -17,7 +17,7 @@ use atlas_voxel_planet::{
     player::{
         align_to_surface, apply_gravity, handle_mouse_look, handle_movement,
         spawn_voxel_player, toggle_cursor, update_camera_pitch,
-        update_chunk_viewpoint_from_player,
+        update_chunk_viewpoint_from_player, update_survival_stats,
     },
     NoiseSeed, Player, PlayerState, PLANET_RADIUS,
 };
@@ -72,6 +72,7 @@ impl Plugin for EditorPlayPlugin {
                     apply_gravity,
                     align_to_surface,
                     update_camera_pitch,
+                    update_survival_stats,
                     toggle_cursor,
                 )
                     .chain()

@@ -4,16 +4,22 @@ A fully procedural **voxel planet engine** written in Rust using [Bevy](https://
 built around the **Atlas Editor** — a full egui-based editor with Play-In-Editor (PIE), world settings,
 solar-system navigation, voxel sculpting tools, and a live outliner.
 
-The runtime voxel game is the primary *example scene* shipped inside the editor.
+This is not a standalone game — it is a **voxel engine**.  The editor is the
+single entry point.  Generated worlds are explored through **PIE (Play-In-Editor)**
+mode: press ▶ to spawn the first-person player inside the editor, and ■ to
+return to the editor camera.
 
 ---
 
-## 📦 Two Entry Points
+## 🚀 Entry Point
 
-| Mode | Command | What you get |
-|------|---------|--------------|
-| **Atlas Editor** | `cargo run -p atlas_editor_app` | Full editor window, PIE, World Settings, solar-system fly-through, voxel tools |
-| **Standalone runtime** | `cargo run -p atlas_runtime_app` | First-person voxel exploration, gravity, sprint, jump — no editor UI |
+```
+cargo run -p atlas_editor_app
+```
+
+The editor opens with the voxel world already loaded.  Use the free-fly camera
+to inspect the terrain, then press **Play (▶)** in the toolbar to enter PIE and
+walk the surface.  Press **Stop (■)** to return to editor mode.
 
 ---
 

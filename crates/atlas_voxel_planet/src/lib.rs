@@ -3,8 +3,9 @@
 //! # Plugin groups
 //! * [`VoxelPlanetPlugins`] — solar system, terrain, atmosphere, vegetation.
 //!   Safe to add in both the editor and the runtime app.
-//! * [`PlayerPlugin`] — first-person controller. Add this in the standalone
-//!   runtime; in the editor, PIE handles player spawning manually.
+//! * [`PlayerPlugin`] — first-person controller. In the editor, PIE handles
+//!   player spawning manually via [`EditorPlayPlugin`]; `PlayerPlugin` is kept
+//!   for testing and standalone contexts.
 
 use bevy::app::PluginGroupBuilder;
 use bevy::prelude::*;

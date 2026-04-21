@@ -1,9 +1,12 @@
 //! `atlas_editor_app` — Atlas Engine editor executable.
 //!
-//! Centred around the Rust Voxel Planet Engine.  The editor loads the full
-//! voxel world (solar system, planet terrain, atmosphere, vegetation) at
-//! startup and provides a planet-aware free-fly camera.  The player controller
-//! is only active during Play-In-Editor sessions.
+//! This is the **single entry point** for the voxel engine.  The editor loads
+//! the full voxel world (solar system, planet terrain, atmosphere, vegetation)
+//! and provides a planet-aware free-fly camera for world inspection and editing.
+//!
+//! To explore a generated world, press **Play (▶)** to enter Play-In-Editor
+//! (PIE) mode, which spawns the first-person player controller directly inside
+//! the editor.  Press **Stop (■)** to return to the editor camera.
 
 use bevy::diagnostic::{EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin};
 use bevy::log::LogPlugin;

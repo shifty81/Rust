@@ -522,18 +522,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "atlas_runtime_app"
-version = "0.1.0"
-dependencies = [
- "atlas_assets",
- "atlas_core",
- "atlas_render",
- "atlas_scene",
- "atlas_voxel_planet",
- "bevy",
-]
-
-[[package]]
 name = "atlas_scene"
 version = "0.1.0"
 dependencies = [
