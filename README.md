@@ -1,17 +1,24 @@
-# Atlas Engine — Rust Voxel Planet Engine & Editor
+# Nova-Forge — Atlas Editor
 
-A fully procedural **voxel planet engine** written in Rust using [Bevy](https://bevyengine.org/) 0.14,
-built around the **Atlas Editor** — a full egui-based editor with Play-In-Editor (PIE), world settings,
-solar-system navigation, voxel sculpting tools, and a live outliner.
+The **Nova-Forge editor** — a full egui-based Bevy 0.14 editor with
+Play-In-Editor (PIE), world settings, voxel sculpting tools, solar-system
+navigation, and a live outliner.
 
-This is not a standalone game — it is a **voxel engine**.  The editor is the
-single entry point.  Generated worlds are explored through **PIE (Play-In-Editor)**
-mode: press ▶ to spawn the first-person player inside the editor, and ■ to
-return to the editor camera.
+> ## 🎯 Role of this repository
+>
+> **This repo is the editor, not a game.** Its job is to author the content
+> (scenes, prefabs, voxel worlds, biomes, creatures, recipes, quests, …) that
+> the separate **Nova-Forge game** repository loads and runs.
+>
+> The `atlas_voxel_planet` crate inside this repo is a **test target / demo
+> viewport** for exercising editor features (voxel sculpting, PIE, world
+> settings, hot-reload).  It is not the shipping game.
+>
+> The shipping game binary lives in the Nova-Forge game repo and consumes the
+> RON / binary assets produced here — so changes authored in this editor
+> propagate to the game without rebuilding the 25-minute engine binary.
 
----
-
-## 🚀 Entry Point
+Launch the editor:
 
 ```
 cargo run -p atlas_editor_app
@@ -291,15 +298,15 @@ Press **▶ Play** in the menu bar to enter PIE:
 git clone https://github.com/shifty81/Rust atlas-engine
 cd atlas-engine
 
-# Atlas Editor (recommended — runs the full engine inside the editor)
+# Nova-Forge editor (recommended — full engine running inside the editor)
 cargo run -p atlas_editor_app
 
-# Atlas Editor — optimised release build
+# Nova-Forge editor — optimised release build
 cargo run -p atlas_editor_app --release
-
-# Standalone runtime only (no editor)
-cargo run -p atlas_runtime_app --release
 ```
+
+> The shipping game binary lives in the separate Nova-Forge game repo and is
+> not built from this workspace.
 
 > **First build:** downloads ~500 Bevy crates — takes several minutes.
 > Subsequent incremental builds are fast (seconds).
@@ -310,10 +317,11 @@ cargo run -p atlas_runtime_app --release
 
 ```
 crates/
-├── atlas_editor_app/           — Editor executable (main entry point)
-├── atlas_runtime_app/          — Standalone runtime executable
+├── atlas_editor_app/           — Nova-Forge editor executable (main entry point)
 │
-├── atlas_voxel_planet/         — Core voxel planet engine
+├── atlas_voxel_planet/         — Test-target voxel engine (demo content for
+│                                  exercising editor features; not the shipping
+│                                  game — that lives in the Nova-Forge game repo)
 │   ├── src/planet.rs           —   Async chunk generation, greedy AO mesher, cave FBM, noise cache
 │   ├── src/biome.rs            —   Biome classification, voxel palette, underground biomes
 │   ├── src/solar_system.rs     —   Sun, moon, planets, orbital mechanics

@@ -1,2 +1,6 @@
 /target
 project/Cache/
+
+# Legacy layout — the `novaforge/` directory is obsolete; the active workspace
+# lives at the repo root.  Ignored so stray build artifacts never sneak back.
+/novaforge/
