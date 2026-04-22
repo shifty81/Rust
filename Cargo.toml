@@ -23,6 +23,7 @@ members = [
     "crates/atlas_editor_project",
     "crates/atlas_editor_world_settings",
     "crates/atlas_editor_voxel_tools",
+    "crates/atlas_editor_export",
     "crates/atlas_editor_app",
 ]
 
@@ -39,6 +40,7 @@ ron         = "0.8"
 uuid        = { version = "1",    features = ["v4", "serde"] }
 noise       = "0.9"
 rand        = "0.8"
+rfd         = "0.14"
 
 # Workspace-internal crates
 atlas_core              = { path = "crates/atlas_core" }
@@ -63,6 +65,7 @@ atlas_editor_log        = { path = "crates/atlas_editor_log" }
 atlas_editor_project    = { path = "crates/atlas_editor_project" }
 atlas_editor_world_settings = { path = "crates/atlas_editor_world_settings" }
 atlas_editor_voxel_tools    = { path = "crates/atlas_editor_voxel_tools" }
+atlas_editor_export         = { path = "crates/atlas_editor_export" }
 
 [profile.dev]
 opt-level = 1

@@ -32,3 +32,4 @@ atlas_editor_log         = { workspace = true }
 atlas_editor_project     = { workspace = true }
 atlas_editor_world_settings = { workspace = true }
 atlas_editor_voxel_tools    = { workspace = true }
+atlas_editor_export         = { workspace = true }

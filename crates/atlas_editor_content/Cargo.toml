@@ -10,3 +10,4 @@ bevy_egui      = { workspace = true }
 atlas_core        = { workspace = true }
 atlas_assets      = { workspace = true }
 atlas_editor_core = { workspace = true }
+atlas_editor_project = { workspace = true }

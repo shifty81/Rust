@@ -15,6 +15,8 @@ use atlas_voxel_planet::{SaveWorldRequest, LoadWorldRequest};
 use atlas_gizmos::{GizmoSpace, SnapSettings};
 use atlas_selection::FocusedEntity;
 use atlas_scene::{ActiveScenePath, SceneDirty};
+use atlas_editor_project::{GameLinkState, LinkGameRequest, UnlinkGameRequest};
+use atlas_editor_export::{ExportToGameRequest, LaunchGameRequest};
 
 /// Default path used when saving the voxel world data.
 const DEFAULT_WORLD_SAVE_PATH: &str = "world.voxelworld";
@@ -51,6 +53,13 @@ struct EditorUiState {
     /// Pending panel-visibility changes from the View menu — applied to the
     /// actual resource by `dispatch_ui_requests`.
     pending_panel_toggle: Option<PanelToggle>,
+    // ── Nova-Forge integration ───────────────────────────────────────────────
+    /// Cached game-link state for the Nova-Forge menu status indicator.
+    game_link_state: GameLinkState,
+    /// Set by the Nova-Forge menu to request an export.
+    export_requested: bool,
+    /// Set by the Nova-Forge menu to request launching the game.
+    launch_game_requested: bool,
 }
 
 /// One of the seven panels togglable from the View menu.
@@ -88,14 +97,16 @@ impl Plugin for EditorUiPlugin {
             .add_systems(
                 Update,
                 // Top panels: menu bar + snap toolbar (must precede side/central panels).
-                (draw_menu_bar, draw_snap_toolbar, draw_undo_history_window)
+                (draw_menu_bar, draw_nova_forge_menu, draw_snap_toolbar, draw_undo_history_window)
                     .chain()
                     .in_set(EditorPanelOrder::Top),
             )
             .add_systems(
                 Update,
                 // Post-panel: dispatch any deferred entity requests after all drawing.
-                dispatch_ui_requests.after(EditorPanelOrder::Central),
+                (dispatch_ui_requests, dispatch_nova_forge_requests)
+                    .chain()
+                    .after(EditorPanelOrder::Central),
             );
     }
 }
@@ -154,6 +165,7 @@ fn sync_ui_state(
     active_path: Res<ActiveScenePath>,
     dirty:       Res<SceneDirty>,
     visibility:  Res<PanelVisibility>,
+    game_link:   Res<GameLinkState>,
 ) {
     state.undo_label = history.undo_label().map(str::to_owned);
     state.redo_label = history.redo_label().map(str::to_owned);
@@ -165,6 +177,7 @@ fn sync_ui_state(
         .to_owned();
     state.scene_is_dirty = dirty.0;
     state.panel_visibility = *visibility;
+    state.game_link_state = game_link.clone();
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -391,6 +404,112 @@ fn draw_menu_bar(
             });
         });
     });
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// Nova-Forge integration menu  (separate system to stay within 16-param limit)
+// ────────────────────────────────────────────────────────────────────────────
+
+fn draw_nova_forge_menu(
+    mut contexts:    EguiContexts,
+    mut ui_state:    ResMut<EditorUiState>,
+    mut link_ev:     EventWriter<LinkGameRequest>,
+    mut unlink_ev:   EventWriter<UnlinkGameRequest>,
+) {
+    let ctx = contexts.ctx_mut();
+
+    // Append to the existing top menu bar that draw_menu_bar already opened.
+    egui::TopBottomPanel::top("atlas_nova_forge_menu")
+        .exact_height(0.0)
+        .show(ctx, |_ui| {
+            // Panel height is zero — the actual menu entry is added to the
+            // *already-open* bar by appending to the same panel id.
+        });
+
+    // Draw as a separate top panel with zero height to attach to the bar
+    // frame; egui coalesces consecutive TopBottomPanels::top into a single
+    // pixel row, so we need to use a floating Area or extend the first bar.
+    // The cleanest approach: re-open the same bar id and add menu entries.
+    egui::TopBottomPanel::top("atlas_menu_bar_nova_forge")
+        .exact_height(22.0)
+        .show_separator_line(false)
+        .show(ctx, |ui| {
+            egui::menu::bar(ui, |ui| {
+                // ── Nova-Forge menu ───────────────────────────────────────
+                ui.menu_button("Nova-Forge", |ui| {
+                    let is_linked = ui_state.game_link_state.is_linked();
+
+                    // Status header
+                    let (status_text, status_color) = if is_linked {
+                        let path_str = ui_state.game_link_state.game_path
+                            .as_ref()
+                            .and_then(|p| p.file_name())
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("linked");
+                        (format!("Linked: {path_str}"), egui::Color32::from_rgb(100, 220, 100))
+                    } else {
+                        ("Not linked".to_owned(), egui::Color32::from_rgb(180, 100, 100))
+                    };
+                    ui.label(egui::RichText::new(status_text).color(status_color).small());
+                    ui.separator();
+
+                    // Link / re-link
+                    if ui.button("🔗  Link Game Repo…").clicked() {
+                        ui.close_menu();
+                        // Spawn a blocking folder picker on a background thread
+                        // (rfd is sync; for editor tools this is acceptable).
+                        if let Some(folder) = rfd::FileDialog::new()
+                            .set_title("Select Nova-Forge repository root")
+                            .pick_folder()
+                        {
+                            link_ev.send(LinkGameRequest(folder));
+                        }
+                    }
+
+                    if is_linked {
+                        if ui.button("🔓  Unlink").clicked() {
+                            unlink_ev.send(UnlinkGameRequest);
+                            ui.close_menu();
+                        }
+                        ui.separator();
+                        if ui.button("📤  Export to Game").clicked() {
+                            ui_state.export_requested = true;
+                            ui.close_menu();
+                        }
+                        if ui.button("▶  Launch Nova-Forge").clicked() {
+                            ui_state.launch_game_requested = true;
+                            ui.close_menu();
+                        }
+                    }
+                });
+
+                // ── Status indicator (right of the Nova-Forge menu) ───────
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let (label, color) = if ui_state.game_link_state.is_linked() {
+                        ("🎮 Nova-Forge: Linked", egui::Color32::from_rgb(100, 220, 100))
+                    } else {
+                        ("🎮 Nova-Forge: Not linked", egui::Color32::from_rgb(160, 100, 100))
+                    };
+                    ui.label(egui::RichText::new(label).small().color(color));
+                });
+            });
+        });
+}
+
+/// Dispatch Nova-Forge requests queued by `draw_nova_forge_menu`.
+fn dispatch_nova_forge_requests(
+    mut ui_state:   ResMut<EditorUiState>,
+    mut export_ev:  EventWriter<ExportToGameRequest>,
+    mut launch_ev:  EventWriter<LaunchGameRequest>,
+) {
+    if ui_state.export_requested {
+        ui_state.export_requested = false;
+        export_ev.send(ExportToGameRequest);
+    }
+    if ui_state.launch_game_requested {
+        ui_state.launch_game_requested = false;
+        launch_ev.send(LaunchGameRequest);
+    }
 }
 
 // ────────────────────────────────────────────────────────────────────────────

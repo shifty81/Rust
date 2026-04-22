@@ -446,6 +446,13 @@ fn draw_viewport_panel(
                                     .color(egui::Color32::from_rgb(80, 160, 255))
                                     .strong(),
                             );
+                            ui.separator();
+                            ui.label(
+                                egui::RichText::new("Editor Sandbox — spherical planet (not the game world)")
+                                    .color(egui::Color32::from_rgb(200, 160, 80))
+                                    .italics()
+                                    .small(),
+                            );
                         });
 
                         // ── Camera info ───────────────────────────────────

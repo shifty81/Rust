@@ -4,6 +4,12 @@
 //! working directory.  Sending [`OpenProjectRequest`] switches the root and
 //! re-reads the settings file from the new location.  [`SaveProjectRequest`]
 //! writes the current settings back to disk.
+//!
+//! # Nova-Forge game linking
+//! [`ProjectSettings::nova_forge_game_path`] stores the absolute path to the
+//! cloned Nova-Forge game repository.  This path is persisted so it survives
+//! editor restarts.  The [`GameLinkState`] resource exposes the derived status
+//! so other panels can react without touching the project resource directly.
 
 use bevy::prelude::*;
 use ron::ser::PrettyConfig;
@@ -25,6 +31,10 @@ pub struct ProjectSettings {
     pub prefabs_root: PathBuf,
     pub cache_root:   PathBuf,
     pub default_scene: Option<PathBuf>,
+    /// Absolute path to the cloned Nova-Forge game repository root.
+    /// When `Some`, the editor exposes game-asset browsing and export.
+    #[serde(default)]
+    pub nova_forge_game_path: Option<PathBuf>,
 }
 
 impl Default for ProjectSettings {
@@ -37,6 +47,7 @@ impl Default for ProjectSettings {
             prefabs_root:  PathBuf::from("project/Prefabs"),
             cache_root:    PathBuf::from("project/Cache"),
             default_scene: None,
+            nova_forge_game_path: None,
         }
     }
 }
@@ -69,6 +80,33 @@ impl ActiveProject {
             .as_ref()
             .map(|r| r.join("project/Config/project.ron"))
     }
+
+    /// Absolute path to the linked Nova-Forge game's `assets/` directory,
+    /// or `None` when no game path is configured.
+    pub fn game_assets_path(&self) -> Option<PathBuf> {
+        self.settings.nova_forge_game_path
+            .as_ref()
+            .map(|p| p.join("assets"))
+    }
+
+    /// Absolute path to the Nova-Forge game binary.
+    ///
+    /// Resolution order:
+    /// 1. `{game_root}/nova-forge.sh`  (Linux / macOS shell wrapper)
+    /// 2. `{game_root}/target/release/nova-forge-voxygen` (Linux / macOS)
+    /// 3. `{game_root}/target/release/nova-forge-voxygen.exe` (Windows)
+    ///
+    /// Returns `None` when no game path is configured, or when none of the
+    /// candidate paths exist on disk.
+    pub fn game_binary_path(&self) -> Option<PathBuf> {
+        let root = self.settings.nova_forge_game_path.as_ref()?;
+        let candidates = [
+            root.join("nova-forge.sh"),
+            root.join("target/release/nova-forge-voxygen"),
+            root.join("target/release/nova-forge-voxygen.exe"),
+        ];
+        candidates.into_iter().find(|p| p.exists())
+    }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -83,6 +121,48 @@ pub struct OpenProjectRequest(pub PathBuf);
 #[derive(Event)]
 pub struct SaveProjectRequest;
 
+/// Link the editor to a Nova-Forge game repository.
+///
+/// The supplied path must be the repository root (the directory that contains
+/// `assets/`, `Cargo.toml`, etc.).  The path is stored in
+/// `ActiveProject::settings.nova_forge_game_path`, persisted to `project.ron`,
+/// and reflected into [`GameLinkState`] immediately.
+#[derive(Event)]
+pub struct LinkGameRequest(pub PathBuf);
+
+/// Unlink the currently linked Nova-Forge game repository.
+#[derive(Event)]
+pub struct UnlinkGameRequest;
+
+// ────────────────────────────────────────────────────────────────────────────
+// Game-link status resource
+// ────────────────────────────────────────────────────────────────────────────
+
+/// Whether the editor is currently linked to a Nova-Forge game repository.
+///
+/// Updated every frame from [`ActiveProject`] so panels can react without
+/// accessing the full project resource.
+#[derive(Resource, Debug, Clone)]
+pub struct GameLinkState {
+    /// The path to the game repo root, if linked.
+    pub game_path: Option<PathBuf>,
+}
+
+impl Default for GameLinkState {
+    fn default() -> Self {
+        Self { game_path: None }
+    }
+}
+
+impl GameLinkState {
+    pub fn is_linked(&self) -> bool { self.game_path.is_some() }
+
+    /// Derived `assets/` path inside the linked game repository.
+    pub fn assets_path(&self) -> Option<PathBuf> {
+        self.game_path.as_ref().map(|p| p.join("assets"))
+    }
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Plugin
 // ────────────────────────────────────────────────────────────────────────────
@@ -93,10 +173,19 @@ impl Plugin for EditorProjectPlugin {
     fn build(&self, app: &mut App) {
         app
             .init_resource::<ActiveProject>()
+            .init_resource::<GameLinkState>()
             .add_event::<OpenProjectRequest>()
             .add_event::<SaveProjectRequest>()
+            .add_event::<LinkGameRequest>()
+            .add_event::<UnlinkGameRequest>()
             .add_systems(Startup, try_load_default_project)
-            .add_systems(Update, (handle_open_project, handle_save_project));
+            .add_systems(Update, (
+                handle_open_project,
+                handle_save_project,
+                handle_link_game,
+                handle_unlink_game,
+                sync_game_link_state,
+            ));
     }
 }
 
@@ -181,4 +270,45 @@ fn save_settings(path: &std::path::Path, settings: &ProjectSettings) -> Result<(
         .map_err(|e| format!("serialise error: {e}"))?;
     std::fs::write(path, text)
         .map_err(|e| format!("write error: {e}"))
+}
+
+fn handle_link_game(
+    mut events:   EventReader<LinkGameRequest>,
+    mut project:  ResMut<ActiveProject>,
+    mut link_ev:  EventWriter<SaveProjectRequest>,
+) {
+    for ev in events.read() {
+        let path = ev.0.clone();
+        if path.is_dir() {
+            info!("Linking Nova-Forge game repository at: {}", path.display());
+            project.settings.nova_forge_game_path = Some(path);
+            // Persist immediately so the link survives editor restarts.
+            link_ev.send(SaveProjectRequest);
+        } else {
+            warn!("LinkGameRequest: path is not a directory: {}", path.display());
+        }
+    }
+}
+
+fn handle_unlink_game(
+    mut events:  EventReader<UnlinkGameRequest>,
+    mut project: ResMut<ActiveProject>,
+    mut save_ev: EventWriter<SaveProjectRequest>,
+) {
+    for _ev in events.read() {
+        info!("Unlinking Nova-Forge game repository.");
+        project.settings.nova_forge_game_path = None;
+        save_ev.send(SaveProjectRequest);
+    }
+}
+
+/// Keep [`GameLinkState`] in sync with the current [`ActiveProject`] settings.
+fn sync_game_link_state(
+    project: Res<ActiveProject>,
+    mut state: ResMut<GameLinkState>,
+) {
+    let new_path = project.settings.nova_forge_game_path.clone();
+    if state.game_path != new_path {
+        state.game_path = new_path;
+    }
 }
