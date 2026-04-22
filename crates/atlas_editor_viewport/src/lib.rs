@@ -1,14 +1,14 @@
-//! `atlas_editor_viewport` — viewport panel: planet-aware editor camera, overlays,
+//! `atlas_editor_viewport` — viewport panel: free-fly editor camera, overlays,
 //! picking, and drop targets.
 //!
-//! The editor camera starts above the voxel planet's north pole and supports
-//! right-mouse-button look + WASD fly (RMB required) + scroll-wheel speed.
+//! The editor camera starts near the world origin and supports right-mouse-button
+//! look + WASD fly (RMB required) + scroll-wheel speed.
 //!
 //! # Navigation shortcuts (no RMB required)
 //! | Key    | Action |
 //! |--------|--------|
-//! | `Home` | Teleport to solar-system overview (~10 Mm out) |
-//! | `End`  | Teleport to planet-surface overview (~2 km up) |
+//! | `Home` | Far overview (zoom out to see the full scene) |
+//! | `End`  | Near overview (zoom in to the world origin) |
 //! | Scroll | Multiply flight speed (×1.25 per notch) |
 
 use bevy::diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin};
@@ -21,7 +21,7 @@ use atlas_editor_core::{EditorCamera, EditorMode, EditorPanelOrder, EntityLabel,
 use atlas_editor_project::GameLinkState;
 use atlas_gizmos::{GizmoInteraction, GizmoMode};
 use atlas_selection::{FocusedEntity, SelectedEntities, SelectionChanged};
-use atlas_voxel_planet::{ChunkManager, ChunkViewpoint, VoxelChunk, CHUNK_SIZE, PLANET_RADIUS, SUN_DISTANCE, VOXEL_SIZE};
+use atlas_voxel_planet::{ChunkManager, ChunkViewpoint, VoxelChunk, CHUNK_SIZE, VOXEL_SIZE};
 
 // ────────────────────────────────────────────────────────────────────────────
 // Editor camera state
@@ -42,19 +42,17 @@ impl Default for EditorCameraState {
     }
 }
 
-// ─── Teleport presets ────────────────────────────────────────────────────────
+// ─── Camera overview presets ─────────────────────────────────────────────────
 
-/// Camera position for the solar-system overview (Home key).
-/// Sits ~10× the sun-distance away on the +Z axis and tilts slightly down.
-const SOLAR_OVERVIEW_POS:   Vec3  = Vec3::new(0.0, SUN_DISTANCE * 3.0, SUN_DISTANCE * 8.0);
-const SOLAR_OVERVIEW_PITCH: f32   = -0.18;
-const SOLAR_OVERVIEW_SPEED: f32   = 500_000.0;
+/// Far-overview camera position (Home key) — 10 000 m back on the +Z axis.
+const FAR_OVERVIEW_POS:   Vec3 = Vec3::new(0.0, 2_000.0, 10_000.0);
+const FAR_OVERVIEW_PITCH: f32  = -0.18;
+const FAR_OVERVIEW_SPEED: f32  = 5_000.0;
 
-/// Camera position for the planet-surface overview (End key).
-/// Sits 3 km above the north pole and tilts down to look at the terrain.
-const PLANET_OVERVIEW_POS:   Vec3  = Vec3::new(0.0, PLANET_RADIUS + 3_000.0, PLANET_RADIUS * 0.08);
-const PLANET_OVERVIEW_PITCH: f32   = -0.55;
-const PLANET_OVERVIEW_SPEED: f32   = 500.0;
+/// Near-overview camera position (End key) — 20 m above the world origin.
+const NEAR_OVERVIEW_POS:   Vec3 = Vec3::new(0.0, 20.0, 40.0);
+const NEAR_OVERVIEW_PITCH: f32  = -0.45;
+const NEAR_OVERVIEW_SPEED: f32  = 10.0;
 
 // ────────────────────────────────────────────────────────────────────────────
 // Teleport event (also triggered from the View menu)
@@ -64,10 +62,10 @@ const PLANET_OVERVIEW_SPEED: f32   = 500.0;
 /// named view preset.
 #[derive(Event, Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TeleportEditorCamera {
-    /// Solar-system overview — fits all planets in view.
-    SolarSystem,
-    /// Planet surface overview — a few km above the north pole.
-    PlanetSurface,
+    /// Far overview — wide field of view, scene fully visible.
+    FarOverview,
+    /// Near overview — close to the world origin.
+    NearOverview,
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -114,16 +112,15 @@ impl Plugin for EditorViewportPlugin {
 }
 
 fn spawn_editor_camera(mut commands: Commands) {
-    // Start above the north pole, tilted slightly to look at the planet surface.
-    let start_pos = Vec3::new(0.0, PLANET_RADIUS + 500.0, PLANET_RADIUS * 0.3);
+    // Start at the near-overview position so the empty scene origin is visible.
     commands.spawn((
         Camera3dBundle {
-            transform: Transform::from_translation(start_pos)
+            transform: Transform::from_translation(NEAR_OVERVIEW_POS)
                 .looking_at(Vec3::ZERO, Vec3::Y),
             ..default()
         },
         EditorCamera,
-        EditorCameraState::default(),
+        EditorCameraState { pitch: NEAR_OVERVIEW_PITCH, speed: NEAR_OVERVIEW_SPEED, ..default() },
     ));
 }
 
@@ -186,13 +183,13 @@ fn update_editor_camera(
         // Still consume teleport events so they aren't lost.
         for ev in teleport_ev.read() {
             match ev {
-                TeleportEditorCamera::SolarSystem => {
+                TeleportEditorCamera::FarOverview => {
                     apply_teleport(&mut transform, &mut state,
-                        SOLAR_OVERVIEW_POS, SOLAR_OVERVIEW_PITCH, SOLAR_OVERVIEW_SPEED);
+                        FAR_OVERVIEW_POS, FAR_OVERVIEW_PITCH, FAR_OVERVIEW_SPEED);
                 }
-                TeleportEditorCamera::PlanetSurface => {
+                TeleportEditorCamera::NearOverview => {
                     apply_teleport(&mut transform, &mut state,
-                        PLANET_OVERVIEW_POS, PLANET_OVERVIEW_PITCH, PLANET_OVERVIEW_SPEED);
+                        NEAR_OVERVIEW_POS, NEAR_OVERVIEW_PITCH, NEAR_OVERVIEW_SPEED);
                 }
             }
         }
@@ -204,13 +201,13 @@ fn update_editor_camera(
     // ── Teleport events (from View menu) ────────────────────────────────────
     for ev in teleport_ev.read() {
         match ev {
-            TeleportEditorCamera::SolarSystem => {
+            TeleportEditorCamera::FarOverview => {
                 apply_teleport(&mut transform, &mut state,
-                    SOLAR_OVERVIEW_POS, SOLAR_OVERVIEW_PITCH, SOLAR_OVERVIEW_SPEED);
+                    FAR_OVERVIEW_POS, FAR_OVERVIEW_PITCH, FAR_OVERVIEW_SPEED);
             }
-            TeleportEditorCamera::PlanetSurface => {
+            TeleportEditorCamera::NearOverview => {
                 apply_teleport(&mut transform, &mut state,
-                    PLANET_OVERVIEW_POS, PLANET_OVERVIEW_PITCH, PLANET_OVERVIEW_SPEED);
+                    NEAR_OVERVIEW_POS, NEAR_OVERVIEW_PITCH, NEAR_OVERVIEW_SPEED);
             }
         }
     }
@@ -218,12 +215,12 @@ fn update_editor_camera(
     // ── Keyboard teleport shortcuts (no RMB required) ────────────────────────
     if keyboard.just_pressed(KeyCode::Home) {
         apply_teleport(&mut transform, &mut state,
-            SOLAR_OVERVIEW_POS, SOLAR_OVERVIEW_PITCH, SOLAR_OVERVIEW_SPEED);
+            FAR_OVERVIEW_POS, FAR_OVERVIEW_PITCH, FAR_OVERVIEW_SPEED);
         return;
     }
     if keyboard.just_pressed(KeyCode::End) {
         apply_teleport(&mut transform, &mut state,
-            PLANET_OVERVIEW_POS, PLANET_OVERVIEW_PITCH, PLANET_OVERVIEW_SPEED);
+            NEAR_OVERVIEW_POS, NEAR_OVERVIEW_PITCH, NEAR_OVERVIEW_SPEED);
         return;
     }
 
@@ -458,7 +455,7 @@ fn draw_viewport_panel(
                                     .unwrap_or("(unnamed project)");
                                 ui.label(
                                     egui::RichText::new(
-                                        format!("Nova-Forge project: {proj_name} — viewport ready for game content"),
+                                        format!("Nova-Forge: {proj_name}"),
                                     )
                                     .color(egui::Color32::from_rgb(100, 210, 160))
                                     .italics()
@@ -466,7 +463,7 @@ fn draw_viewport_panel(
                                 );
                             } else {
                                 ui.label(
-                                    egui::RichText::new("Editor Sandbox — spherical planet (not the game world)")
+                                    egui::RichText::new("No project linked — use Edit → Nova-Forge to link a game repo")
                                         .color(egui::Color32::from_rgb(200, 160, 80))
                                         .italics()
                                         .small(),
@@ -476,36 +473,18 @@ fn draw_viewport_panel(
 
                         // ── Camera info ───────────────────────────────────
                         if let Ok((tf, state)) = cam_q.get_single() {
-                            let p     = tf.translation;
-                            let dist  = p.length();
-                            let alt_km = (dist - PLANET_RADIUS) / 1_000.0;
-                            let sun_dist_km = (p - Vec3::new(SUN_DISTANCE, 0.0, 0.0)).length() / 1_000.0;
-
-                            if game_link.is_linked() {
-                                ui.horizontal(|ui| {
-                                    ui.label(format!(
-                                        "Pos ({:.0}, {:.0}, {:.0})  speed {:.0} m/s",
-                                        p.x, p.y, p.z, state.speed,
-                                    ));
-                                });
-                            } else {
-                                ui.horizontal(|ui| {
-                                    ui.label(format!(
-                                        "Pos ({:.0}, {:.0}, {:.0})  alt {}{:.1} km  speed {:.0} m/s",
-                                        p.x, p.y, p.z,
-                                        if alt_km < 0.0 { "-" } else { "+" },
-                                        alt_km.abs(),
-                                        state.speed,
-                                    ));
-                                    ui.separator();
-                                    ui.label(format!("☀  {:.0} km", sun_dist_km));
-                                });
-                            }
+                            let p = tf.translation;
+                            ui.horizontal(|ui| {
+                                ui.label(format!(
+                                    "Pos ({:.0}, {:.0}, {:.0})  speed {:.0} m/s",
+                                    p.x, p.y, p.z, state.speed,
+                                ));
+                            });
 
                             ui.label(
                                 egui::RichText::new(
                                     "RMB+drag: look · WASD/QE: fly · scroll: speed  |  \
-                                     Home: solar system · End: planet surface  |  \
+                                     Home: far overview · End: near overview  |  \
                                      W/E/R: gizmo · G: grid"
                                 )
                                 .weak()
@@ -515,8 +494,8 @@ fn draw_viewport_panel(
                     });
                 });
 
-            // ── Nova-Forge placeholder: centred message when linked and scene is empty ─
-            if game_link.is_linked() {
+            // ── Viewport placeholder — always shown until a scene is opened ──
+            {
                 let center = rect.center();
                 egui::Area::new(egui::Id::new("atlas_nova_forge_placeholder"))
                     .fixed_pos(egui::pos2(center.x - 220.0, center.y - 40.0))
@@ -529,21 +508,44 @@ fn draw_viewport_panel(
                             .show(ui, |ui| {
                                 ui.set_width(440.0);
                                 ui.vertical_centered(|ui| {
-                                    ui.label(
-                                        egui::RichText::new("🎮  Nova-Forge Project Linked")
-                                            .color(egui::Color32::from_rgb(100, 210, 160))
-                                            .size(18.0)
-                                            .strong(),
-                                    );
-                                    ui.add_space(6.0);
-                                    ui.label(
-                                        egui::RichText::new(
-                                            "The editor sandbox is suppressed while a game repo is linked.\n\
-                                             Open a scene or use File → Import to load game content."
-                                        )
-                                        .color(egui::Color32::from_rgb(180, 180, 180))
-                                        .small(),
-                                    );
+                                    if game_link.is_linked() {
+                                        let proj_name = game_link
+                                            .game_path
+                                            .as_ref()
+                                            .and_then(|p| p.file_name())
+                                            .and_then(|n| n.to_str())
+                                            .unwrap_or("(unnamed project)");
+                                        ui.label(
+                                            egui::RichText::new(format!("🎮  {proj_name}"))
+                                                .color(egui::Color32::from_rgb(100, 210, 160))
+                                                .size(18.0)
+                                                .strong(),
+                                        );
+                                        ui.add_space(6.0);
+                                        ui.label(
+                                            egui::RichText::new(
+                                                "Open a scene to load game content."
+                                            )
+                                            .color(egui::Color32::from_rgb(180, 180, 180))
+                                            .small(),
+                                        );
+                                    } else {
+                                        ui.label(
+                                            egui::RichText::new("Nova-Forge Editor")
+                                                .color(egui::Color32::from_rgb(100, 160, 220))
+                                                .size(18.0)
+                                                .strong(),
+                                        );
+                                        ui.add_space(6.0);
+                                        ui.label(
+                                            egui::RichText::new(
+                                                "Link a Nova-Forge game repository to get started.\n\
+                                                 Edit → Nova-Forge → Link Game Repository"
+                                            )
+                                            .color(egui::Color32::from_rgb(180, 180, 180))
+                                            .small(),
+                                        );
+                                    }
                                 });
                             });
                     });

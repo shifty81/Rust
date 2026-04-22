@@ -54,18 +54,17 @@ pub use world_io::{SaveWorldRequest, LoadWorldRequest, WorldIoPlugin};
 // Voxel-world on/off toggle
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// Controls whether the voxel world (solar system, planet terrain) should be
-/// active.
+/// Controls whether the voxel sandbox (solar system, planet terrain) should be
+/// spawned.
 ///
-/// Default is `true` (normal editor sandbox mode).  Set to `false` before
-/// `app.run()` when the editor is linked to a Nova-Forge game repository so
-/// that the default planet demo is suppressed in favour of an empty viewport
-/// waiting for game content.
+/// Permanently `false` in the Nova-Forge editor — the sandbox is never loaded.
+/// `WorldPlugins` still registers all necessary resources (ChunkManager,
+/// WorldSettings, etc.) but skips every Startup spawn because of this flag.
 #[derive(bevy::prelude::Resource, Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VoxelWorldEnabled(pub bool);
 
 impl Default for VoxelWorldEnabled {
-    fn default() -> Self { Self(true) }
+    fn default() -> Self { Self(false) }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

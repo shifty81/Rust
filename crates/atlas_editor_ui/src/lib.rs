@@ -312,12 +312,12 @@ fn draw_menu_bar(
             ui.menu_button("View", |ui| {
                 ui.label(egui::RichText::new("Editor Camera").weak().small());
                 ui.separator();
-                if ui.button("🌌  Solar System Overview  [Home]").clicked() {
-                    teleport_ev.send(TeleportEditorCamera::SolarSystem);
+                if ui.button("🔭  Far Overview  [Home]").clicked() {
+                    teleport_ev.send(TeleportEditorCamera::FarOverview);
                     ui.close_menu();
                 }
-                if ui.button("🌍  Planet Surface Overview  [End]").clicked() {
-                    teleport_ev.send(TeleportEditorCamera::PlanetSurface);
+                if ui.button("🎯  Near Overview  [End]").clicked() {
+                    teleport_ev.send(TeleportEditorCamera::NearOverview);
                     ui.close_menu();
                 }
                 ui.separator();
