@@ -456,8 +456,10 @@ fn draw_nova_forge_menu(
                     // Link / re-link
                     if ui.button("🔗  Link Game Repo…").clicked() {
                         ui.close_menu();
-                        // Spawn a blocking folder picker on a background thread
-                        // (rfd is sync; for editor tools this is acceptable).
+                        // rfd::FileDialog is a blocking modal OS dialog.  This
+                        // freezes the editor frame while the picker is open, which
+                        // is standard behaviour for OS file dialogs (the user
+                        // expects the app to wait).
                         if let Some(folder) = rfd::FileDialog::new()
                             .set_title("Select Nova-Forge repository root")
                             .pick_folder()

@@ -38,6 +38,11 @@ struct ContentBrowserState {
     detail_file: Option<PathBuf>,
     /// Cached content of the detail file (loaded lazily).
     detail_text: Option<String>,
+    /// Cached top-level directories under `{game}/assets/` — refreshed only
+    /// when the linked game path changes.
+    cached_game_dirs: Vec<PathBuf>,
+    /// The game path that `cached_game_dirs` was built from.
+    game_dirs_from_path: Option<PathBuf>,
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -109,6 +114,23 @@ fn draw_content_panel(
 
                         // ── Game Assets root (only when linked) ──────────
                         if let Some(assets_path) = game_link.assets_path() {
+                            // Refresh the cached directory list only when the
+                            // linked path changes (not every frame).
+                            if state.game_dirs_from_path.as_deref() != Some(assets_path.as_path()) {
+                                state.cached_game_dirs = if let Ok(rd) = std::fs::read_dir(&assets_path) {
+                                    let mut dirs: Vec<PathBuf> = rd
+                                        .flatten()
+                                        .filter(|e| e.path().is_dir())
+                                        .map(|e| e.path())
+                                        .collect();
+                                    dirs.sort();
+                                    dirs
+                                } else {
+                                    Vec::new()
+                                };
+                                state.game_dirs_from_path = Some(assets_path);
+                            }
+
                             ui.add_space(6.0);
                             ui.label(
                                 egui::RichText::new("🎮 Game Assets")
@@ -116,32 +138,27 @@ fn draw_content_panel(
                                     .color(egui::Color32::from_rgb(100, 220, 100)),
                             );
                             ui.indent("game_asset_folders", |ui| {
-                                // Top-level dirs under assets/
-                                if let Ok(rd) = std::fs::read_dir(&assets_path) {
-                                    let mut dirs: Vec<PathBuf> = rd
-                                        .flatten()
-                                        .filter(|e| e.path().is_dir())
-                                        .map(|e| e.path())
-                                        .collect();
-                                    dirs.sort();
-                                    for dir in &dirs {
-                                        let label = dir
-                                            .file_name()
-                                            .and_then(|n| n.to_str())
-                                            .unwrap_or("?");
-                                        let is_selected = state.selected_folder
-                                            == Some(SelectedFolder::GameFolder(dir.clone()));
-                                        if ui.selectable_label(is_selected, label).clicked() {
-                                            state.selected_folder =
-                                                Some(SelectedFolder::GameFolder(dir.clone()));
-                                            state.detail_file = None;
-                                            // Scan the folder for .ron files.
-                                            state.game_folder_entries =
-                                                scan_game_folder(dir);
-                                        }
+                                for dir in state.cached_game_dirs.clone() {
+                                    let label = dir
+                                        .file_name()
+                                        .and_then(|n| n.to_str())
+                                        .unwrap_or("?");
+                                    let is_selected = state.selected_folder
+                                        == Some(SelectedFolder::GameFolder(dir.clone()));
+                                    if ui.selectable_label(is_selected, label).clicked() {
+                                        state.selected_folder =
+                                            Some(SelectedFolder::GameFolder(dir.clone()));
+                                        state.detail_file = None;
+                                        state.game_folder_entries = scan_game_folder(&dir);
                                     }
                                 }
                             });
+                        } else {
+                            // Game unlinked — reset cached dirs.
+                            if state.game_dirs_from_path.is_some() {
+                                state.cached_game_dirs.clear();
+                                state.game_dirs_from_path = None;
+                            }
                         }
                     });
 
