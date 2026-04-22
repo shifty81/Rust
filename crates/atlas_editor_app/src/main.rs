@@ -40,6 +40,12 @@ use atlas_editor_voxel_tools::VoxelToolsPlugin;
 use atlas_editor_export::EditorExportPlugin;
 
 fn main() {
+    // Bevy's file-watcher (enabled below for hot-reload) panics if the watched
+    // path does not exist as a directory.  Ensure `assets/` is present relative
+    // to the working directory before building the App so the watcher always
+    // has a valid path to watch, regardless of where the executable is invoked.
+    let _ = std::fs::create_dir_all("assets");
+
     App::new()
         // ── Host window ──────────────────────────────────────────────────────
         .add_plugins(DefaultPlugins
