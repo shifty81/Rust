@@ -491,14 +491,9 @@ dependencies = [
 name = "atlas_editor_export"
 version = "0.1.0"
 dependencies = [
- "atlas_editor_core",
  "atlas_editor_log",
  "atlas_editor_project",
- "atlas_scene",
- "atlas_voxel_planet",
  "bevy",
- "ron",
- "serde",
 ]
 
 [[package]]

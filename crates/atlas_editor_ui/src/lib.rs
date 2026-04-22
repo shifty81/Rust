@@ -15,7 +15,7 @@ use atlas_commands::{UndoRequested, RedoRequested, CommandHistory};
 use atlas_gizmos::{GizmoSpace, SnapSettings};
 use atlas_selection::FocusedEntity;
 use atlas_scene::{ActiveScenePath, SceneDirty};
-use atlas_editor_project::{GameLinkState, LinkGameRequest, UnlinkGameRequest};
+use atlas_editor_project::{GameLinkState, LinkGameRequest, UnlinkGameRequest, OpenProjectRequest};
 use atlas_editor_export::{ExportToGameRequest, LaunchGameRequest};
 
 /// Placeholder path used when no file dialog is available yet.
@@ -61,6 +61,8 @@ struct EditorUiState {
     link_requested: bool,
     /// Set by the Nova-Forge menu to unlink the current repo.
     unlink_requested: bool,
+    /// Set by the File menu to open a folder picker and load a project.
+    open_project_requested: bool,
 }
 
 /// One of the panels togglable from the View menu.
@@ -217,6 +219,11 @@ fn draw_menu_bar(
                 }
                 if ui.button("Save Scene").clicked() {
                     save_ev.send(SaveSceneRequest);
+                    ui.close_menu();
+                }
+                ui.separator();
+                if ui.button("📁  Open Project…").clicked() {
+                    ui_state.open_project_requested = true;
                     ui.close_menu();
                 }
                 ui.separator();
@@ -453,12 +460,22 @@ fn draw_menu_bar(
 /// Link/unlink open blocking OS dialogs (via `rfd`); export and launch are
 /// forwarded as Bevy events so the actual work happens in `atlas_editor_export`.
 fn dispatch_nova_forge_requests(
-    mut ui_state:   ResMut<EditorUiState>,
-    mut link_ev:    EventWriter<LinkGameRequest>,
-    mut unlink_ev:  EventWriter<UnlinkGameRequest>,
-    mut export_ev:  EventWriter<ExportToGameRequest>,
-    mut launch_ev:  EventWriter<LaunchGameRequest>,
+    mut ui_state:      ResMut<EditorUiState>,
+    mut open_proj_ev:  EventWriter<OpenProjectRequest>,
+    mut link_ev:       EventWriter<LinkGameRequest>,
+    mut unlink_ev:     EventWriter<UnlinkGameRequest>,
+    mut export_ev:     EventWriter<ExportToGameRequest>,
+    mut launch_ev:     EventWriter<LaunchGameRequest>,
 ) {
+    if ui_state.open_project_requested {
+        ui_state.open_project_requested = false;
+        if let Some(folder) = rfd::FileDialog::new()
+            .set_title("Select project root folder")
+            .pick_folder()
+        {
+            open_proj_ev.send(OpenProjectRequest(folder));
+        }
+    }
     if ui_state.link_requested {
         ui_state.link_requested = false;
         // rfd::FileDialog is a blocking modal OS dialog — the editor frame

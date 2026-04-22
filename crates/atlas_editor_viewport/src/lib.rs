@@ -463,7 +463,7 @@ fn draw_viewport_panel(
                                 );
                             } else {
                                 ui.label(
-                                    egui::RichText::new("No project linked — use Edit → Nova-Forge to link a game repo")
+                                    egui::RichText::new("No project linked — use Nova-Forge → Link Game Repo…")
                                         .color(egui::Color32::from_rgb(200, 160, 80))
                                         .italics()
                                         .small(),
@@ -540,7 +540,7 @@ fn draw_viewport_panel(
                                         ui.label(
                                             egui::RichText::new(
                                                 "Link a Nova-Forge game repository to get started.\n\
-                                                 Edit → Nova-Forge → Link Game Repository"
+                                                 Nova-Forge → Link Game Repo…"
                                             )
                                             .color(egui::Color32::from_rgb(180, 180, 180))
                                             .small(),
