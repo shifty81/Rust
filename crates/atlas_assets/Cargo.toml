@@ -2,10 +2,12 @@
 name    = "atlas_assets"
 version = "0.1.0"
 edition = "2021"
-description = "Asset registry, handles, metadata, and import rules."
+description = "Asset registry, handles, metadata, and RON content loaders."
 
 [dependencies]
-bevy    = { workspace = true }
-serde   = { workspace = true }
-uuid    = { workspace = true }
+bevy       = { workspace = true }
+serde      = { workspace = true }
+ron        = { workspace = true }
+uuid       = { workspace = true }
 atlas_core = { workspace = true }
+thiserror  = "1"

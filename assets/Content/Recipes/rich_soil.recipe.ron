@@ -1,0 +1,11 @@
+// Rich Soil
+//
+// Dirt → Grass.  Converts plain dirt into grass-covered soil suitable for
+// vegetation placement.
+(
+    name: "Rich Soil",
+    ingredients: [
+        (voxel: "Dirt", count: 2),
+    ],
+    output: (voxel: "Grass", count: 1),
+)

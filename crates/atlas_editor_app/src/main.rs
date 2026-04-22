@@ -57,6 +57,15 @@ fn main() {
                 filter: "info,wgpu_core=warn,wgpu_hal=warn,naga=warn".to_string(),
                 ..default()
             })
+            // Hot-reload authored RON content (recipes, biomes, voxels, …)
+            // while the editor is running.  Bevy's file-watcher feature is
+            // enabled at the workspace level; this flag turns it on at
+            // runtime so `AssetEvent::Modified` fires on edits under
+            // `assets/Content/`.
+            .set(AssetPlugin {
+                watch_for_changes_override: Some(true),
+                ..default()
+            })
         )
 
         // ── Diagnostics ──────────────────────────────────────────────────────

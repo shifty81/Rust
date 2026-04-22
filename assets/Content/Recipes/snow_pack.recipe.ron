@@ -1,0 +1,12 @@
+// Snow Pack
+//
+// Snow + Crystal → Ice.  A cold-climate recipe that combines powder snow with
+// a focusing crystal to produce solid ice suitable for building igloos.
+(
+    name: "Snow Pack",
+    ingredients: [
+        (voxel: "Snow",    count: 2),
+        (voxel: "Crystal", count: 1),
+    ],
+    output: (voxel: "Ice", count: 2),
+)

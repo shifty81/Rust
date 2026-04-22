@@ -1,0 +1,11 @@
+// Compressed Stone
+//
+// Gravel → Stone.  A simple mass-conversion recipe useful for clearing
+// excess gravel and stocking up on building stone.
+(
+    name: "Compressed Stone",
+    ingredients: [
+        (voxel: "Gravel", count: 3),
+    ],
+    output: (voxel: "Stone", count: 2),
+)

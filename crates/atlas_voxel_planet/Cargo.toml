@@ -5,6 +5,7 @@ edition = "2021"
 description = "Rust Voxel Planet Engine: 1/128 Earth-scale planet with solar system, biomes, weather, and character controller"
 
 [dependencies]
-bevy  = { workspace = true }
-noise = { workspace = true }
-rand  = { workspace = true }
+bevy         = { workspace = true }
+noise        = { workspace = true }
+rand         = { workspace = true }
+atlas_assets = { workspace = true }

@@ -1,0 +1,10 @@
+// Crystal Refinement
+//
+// Obsidian → Crystal.  Refines dark obsidian glass into crystalline form.
+(
+    name: "Crystal Refinement",
+    ingredients: [
+        (voxel: "Obsidian", count: 3),
+    ],
+    output: (voxel: "Crystal", count: 1),
+)

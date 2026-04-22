@@ -4,6 +4,17 @@
 //! set of voxel ingredients drawn from the player's hotbar inventory into one
 //! or more output voxels that are added to the hotbar.
 //!
+//! # Data-driven recipes
+//!
+//! Recipes are authored as RON files under `assets/Content/Recipes/` and
+//! loaded at startup through [`atlas_assets::RecipeAsset`].  Editing a
+//! `.recipe.ron` file while the editor is running triggers Bevy's asset
+//! watcher, the [`RuntimeRecipes`] resource rebuilds, and the crafting panel
+//! regenerates in place — no 25-minute engine rebuild required.  If the
+//! `Content/Recipes/` directory is empty or unreachable, the panel falls
+//! back to the compiled-in [`RECIPES`] list so standalone / test builds
+//! still work without content on disk.
+//!
 //! # Panel layout
 //! A semi-transparent panel appears on the right side of the screen.
 //! Each row shows:
@@ -15,11 +26,16 @@
 //!
 //! # Architecture
 //! * [`CraftingUiState`] resource tracks whether the panel is open.
-//! * [`RECIPES`] is a static list of all [`Recipe`] values.
+//! * [`RECIPES`] is the compiled-in fallback list of recipes.
+//! * [`RuntimeRecipes`] is the *active* recipe table consumed by the UI;
+//!   populated at startup from the fallback, then replaced when RON
+//!   `RecipeAsset`s are loaded / modified / removed.
 //! * [`CraftButton`] component on each button stores the recipe index.
 //! * The `handle_craft_buttons` system performs the actual inventory transfer.
 
 use bevy::prelude::*;
+
+use atlas_assets::RecipeAsset;
 
 use crate::biome::Voxel;
 use crate::inventory::Inventory;
@@ -36,6 +52,10 @@ const HOTBAR_VOXELS: [Voxel; 9] = [
     Voxel::Obsidian,
 ];
 
+/// Directory (relative to the Bevy asset root, which is `assets/`) that the
+/// content scanner walks at startup looking for `*.recipe.ron` files.
+const RECIPE_CONTENT_DIR: &str = "Content/Recipes";
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 pub struct CraftingPlugin;
@@ -43,11 +63,19 @@ pub struct CraftingPlugin;
 impl Plugin for CraftingPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<CraftingUiState>()
-            .add_systems(Startup, setup_crafting_ui)
+            .init_resource::<RuntimeRecipes>()
+            .init_resource::<RecipeFolder>()
+            .add_systems(
+                Startup,
+                (populate_builtin_recipes, load_recipe_content, setup_crafting_ui)
+                    .chain(),
+            )
             .add_systems(
                 Update,
                 (
                     toggle_crafting_ui,
+                    rebuild_runtime_recipes_on_asset_change,
+                    refill_crafting_panel_on_change,
                     update_crafting_ui,
                     handle_craft_buttons,
                 )
@@ -60,7 +88,10 @@ impl Plugin for CraftingPlugin {
 //  Recipes
 // ─────────────────────────────────────────────────────────────────────────────
 
-/// A single crafting recipe.
+/// A single crafting recipe.  The compiled-in [`RECIPES`] list uses this type
+/// with `&'static str` fields; the runtime table [`RuntimeRecipes`] stores
+/// the owned [`OwnedRecipe`] equivalent so RON-loaded data can participate
+/// without leaking strings.
 pub struct Recipe {
     /// Human-readable name shown in the crafting panel.
     pub name: &'static str,
@@ -72,7 +103,64 @@ pub struct Recipe {
     pub output_count: u32,
 }
 
-/// All available crafting recipes.
+/// Owned, heap-allocated variant of [`Recipe`] used for recipes loaded from
+/// disk.  Functionally identical to [`Recipe`] but lives past the end of its
+/// source asset file.
+#[derive(Debug, Clone)]
+pub struct OwnedRecipe {
+    pub name:         String,
+    pub ingredients:  Vec<(Voxel, u32)>,
+    pub output_voxel: Voxel,
+    pub output_count: u32,
+}
+
+impl OwnedRecipe {
+    fn from_builtin(r: &Recipe) -> Self {
+        Self {
+            name:         r.name.to_string(),
+            ingredients:  r.ingredients.to_vec(),
+            output_voxel: r.output_voxel,
+            output_count: r.output_count,
+        }
+    }
+
+    /// Convert an authored [`RecipeAsset`] into the runtime form.  Unknown
+    /// voxel names are logged and the recipe is skipped — returning `None`.
+    fn from_asset(asset: &RecipeAsset, source_path: &str) -> Option<Self> {
+        let mut ingredients = Vec::with_capacity(asset.ingredients.len());
+        for ing in &asset.ingredients {
+            match voxel_from_name(&ing.voxel) {
+                Some(v) => ingredients.push((v, ing.count)),
+                None => {
+                    warn!(
+                        "recipe '{}' in '{}' references unknown voxel '{}' — recipe skipped",
+                        asset.name, source_path, ing.voxel
+                    );
+                    return None;
+                }
+            }
+        }
+        let output_voxel = match voxel_from_name(&asset.output.voxel) {
+            Some(v) => v,
+            None => {
+                warn!(
+                    "recipe '{}' in '{}' produces unknown voxel '{}' — recipe skipped",
+                    asset.name, source_path, asset.output.voxel
+                );
+                return None;
+            }
+        };
+        Some(Self {
+            name:         asset.name.clone(),
+            ingredients,
+            output_voxel,
+            output_count: asset.output.count,
+        })
+    }
+}
+
+/// Compiled-in fallback recipes.  Used before any `RecipeAsset`s load, or
+/// permanently for builds that have no `Content/Recipes/` directory.
 pub static RECIPES: &[Recipe] = &[
     Recipe {
         name:         "Compressed Stone",
@@ -112,14 +200,65 @@ pub static RECIPES: &[Recipe] = &[
     },
 ];
 
+/// Map a voxel enum-variant name (as authored in a `.recipe.ron` file) to
+/// the engine's [`Voxel`] enum.  Returns `None` for unknown names so the
+/// loader can skip malformed recipes instead of panicking.
+///
+/// **Transitional duplication of the `Voxel` enum:** when voxel types
+/// themselves migrate to `assets/Content/Voxels/*.voxel.ron` (planned
+/// follow-up PR), this function goes away entirely — recipes will
+/// reference voxels by stable numeric ID / asset path, not by variant
+/// name.  Adding a `strum`-style macro derive today would only bake in
+/// an abstraction we're about to remove.
+fn voxel_from_name(name: &str) -> Option<Voxel> {
+    Some(match name {
+        "Air"       => Voxel::Air,
+        "Stone"     => Voxel::Stone,
+        "Dirt"      => Voxel::Dirt,
+        "Grass"     => Voxel::Grass,
+        "Sand"      => Voxel::Sand,
+        "Sandstone" => Voxel::Sandstone,
+        "Snow"      => Voxel::Snow,
+        "Ice"       => Voxel::Ice,
+        "Water"     => Voxel::Water,
+        "Gravel"    => Voxel::Gravel,
+        "Rock"      => Voxel::Rock,
+        "Crystal"   => Voxel::Crystal,
+        "Magma"     => Voxel::Magma,
+        "Obsidian"  => Voxel::Obsidian,
+        _ => return None,
+    })
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-//  Resource
+//  Resources
 // ─────────────────────────────────────────────────────────────────────────────
 
 /// Whether the crafting panel is currently visible.
 #[derive(Resource, Default)]
 pub struct CraftingUiState {
     pub is_open: bool,
+}
+
+/// The active recipe table the crafting UI reads from.  Starts out mirroring
+/// the compiled-in [`RECIPES`] list, and is replaced wholesale once any
+/// `RecipeAsset`s load from `assets/Content/Recipes/`.
+#[derive(Resource, Default)]
+pub struct RuntimeRecipes {
+    pub recipes: Vec<OwnedRecipe>,
+    /// `true` once at least one recipe has been loaded from disk; disables
+    /// the compiled-in fallback for subsequent rebuilds.
+    pub loaded_from_content: bool,
+}
+
+/// Strong handle to the `LoadedFolder` for the recipe content directory.
+/// Bevy's asset server gives us a folder-level asset whose contents re-scan
+/// when files are added, removed, or modified; that's what drives the
+/// hot-reload path below.  Kept strong so the folder (and, transitively,
+/// every contained `RecipeAsset`) stays alive for the editor's lifetime.
+#[derive(Resource, Default)]
+struct RecipeFolder {
+    handle: Handle<bevy::asset::LoadedFolder>,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -165,8 +304,8 @@ fn voxel_name(v: Voxel) -> &'static str {
     }
 }
 
-fn can_craft(recipe: &Recipe, inventory: &Inventory) -> bool {
-    for &(ingredient, needed) in recipe.ingredients {
+fn can_craft(recipe: &OwnedRecipe, inventory: &Inventory) -> bool {
+    for &(ingredient, needed) in &recipe.ingredients {
         let count = HOTBAR_VOXELS
             .iter()
             .position(|&v| v == ingredient)
@@ -179,8 +318,8 @@ fn can_craft(recipe: &Recipe, inventory: &Inventory) -> bool {
     true
 }
 
-fn do_craft(recipe: &Recipe, inventory: &mut Inventory) {
-    for &(ingredient, needed) in recipe.ingredients {
+fn do_craft(recipe: &OwnedRecipe, inventory: &mut Inventory) {
+    for &(ingredient, needed) in &recipe.ingredients {
         if let Some(slot) = HOTBAR_VOXELS.iter().position(|&v| v == ingredient) {
             inventory.counts[slot] = inventory.counts[slot].saturating_sub(needed);
         }
@@ -190,7 +329,7 @@ fn do_craft(recipe: &Recipe, inventory: &mut Inventory) {
     }
 }
 
-fn ingredient_text(recipe: &Recipe) -> String {
+fn ingredient_text(recipe: &OwnedRecipe) -> String {
     recipe
         .ingredients
         .iter()
@@ -200,10 +339,95 @@ fn ingredient_text(recipe: &Recipe) -> String {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Systems
+//  Content loading
 // ─────────────────────────────────────────────────────────────────────────────
 
-fn setup_crafting_ui(mut commands: Commands) {
+/// Populate [`RuntimeRecipes`] from the compiled-in fallback list.  Runs
+/// before `setup_crafting_ui` so the initial panel has rows immediately,
+/// even on the very first frame before any RON assets have finished loading.
+fn populate_builtin_recipes(mut runtime: ResMut<RuntimeRecipes>) {
+    runtime.recipes = RECIPES.iter().map(OwnedRecipe::from_builtin).collect();
+    runtime.loaded_from_content = false;
+}
+
+/// Ask the asset server to load every file under `Content/Recipes/` as a
+/// [`LoadedFolder`].  Bevy walks the folder through its virtual filesystem
+/// (respecting custom asset sources and web-compatible file access), and
+/// re-scans it on disk events so files added **at runtime** show up without
+/// an editor restart.  The contained typed assets are dispatched to the
+/// registered `RonAssetLoader<RecipeAsset>` by extension.
+///
+/// If the directory is missing or empty we silently keep the compiled-in
+/// fallback — this is expected in CI / headless contexts that don't ship a
+/// content pack.  Bevy surfaces missing-folder warnings through the log,
+/// so no extra error handling is needed here.
+fn load_recipe_content(asset_server: Res<AssetServer>, mut folder: ResMut<RecipeFolder>) {
+    folder.handle = asset_server.load_folder(RECIPE_CONTENT_DIR);
+    info!(
+        "crafting: requested recipe folder '{}' (hot-reload enabled)",
+        RECIPE_CONTENT_DIR,
+    );
+}
+
+/// React to any change in either the `LoadedFolder` (file added / removed)
+/// or any individual `RecipeAsset` (file modified) by rebuilding the
+/// [`RuntimeRecipes`] table from the currently-loaded assets.  If nothing
+/// has finished loading yet (e.g. initial parse is still in flight), the
+/// existing table is kept so the panel doesn't flicker to empty.
+fn rebuild_runtime_recipes_on_asset_change(
+    mut folder_events: EventReader<AssetEvent<bevy::asset::LoadedFolder>>,
+    mut recipe_events: EventReader<AssetEvent<RecipeAsset>>,
+    folder: Res<RecipeFolder>,
+    folders: Res<Assets<bevy::asset::LoadedFolder>>,
+    recipes: Res<Assets<RecipeAsset>>,
+    mut runtime: ResMut<RuntimeRecipes>,
+) {
+    // Drain both readers; we only care *that* something changed, not which
+    // event.  `count() > 0` drains them without the manual-flag idiom the
+    // reviewer flagged.
+    let folder_changed = folder_events.read().count() > 0;
+    let recipe_changed = recipe_events.read().count() > 0;
+    if !(folder_changed || recipe_changed) {
+        return;
+    }
+
+    let Some(loaded_folder) = folders.get(&folder.handle) else {
+        // Folder itself hasn't finished loading yet; next event will wake us.
+        return;
+    };
+
+    let mut rebuilt: Vec<OwnedRecipe> = Vec::new();
+    for untyped in &loaded_folder.handles {
+        // The folder contains every file regardless of extension; typed
+        // access filters naturally — `try_typed` succeeds only for
+        // `.recipe.ron` handles (that's what our loader claims).
+        let Ok(typed) = untyped.clone().try_typed::<RecipeAsset>() else { continue };
+        let Some(asset) = recipes.get(&typed) else { continue };
+        let path = typed.path().map(|p| p.to_string()).unwrap_or_else(|| "<unknown>".into());
+        if let Some(owned) = OwnedRecipe::from_asset(asset, &path) {
+            rebuilt.push(owned);
+        }
+    }
+
+    if rebuilt.is_empty() {
+        // No recipes loaded yet, or every file was malformed.  Keep whatever
+        // we had rather than collapsing the panel.
+        return;
+    }
+
+    // Stable alphabetical order by name so panel row indices are
+    // deterministic across reloads.
+    rebuilt.sort_by(|a, b| a.name.cmp(&b.name));
+
+    runtime.recipes = rebuilt;
+    runtime.loaded_from_content = true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Systems — panel lifecycle
+// ─────────────────────────────────────────────────────────────────────────────
+
+fn setup_crafting_ui(mut commands: Commands, runtime: Res<RuntimeRecipes>) {
     // ── Panel root (right side, hidden initially) ────────────────────────────
     let root = commands.spawn((
         NodeBundle {
@@ -227,6 +451,11 @@ fn setup_crafting_ui(mut commands: Commands) {
         crate::components::GameplayUiRoot,
     )).id();
 
+    fill_crafting_panel(&mut commands, root, &runtime);
+}
+
+/// Spawn the header + one row per recipe as children of `panel`.
+fn fill_crafting_panel(commands: &mut Commands, panel: Entity, runtime: &RuntimeRecipes) {
     // ── Header ───────────────────────────────────────────────────────────────
     let header = commands.spawn(TextBundle::from_section(
         "⚒ CRAFTING  [C to close]",
@@ -236,10 +465,10 @@ fn setup_crafting_ui(mut commands: Commands) {
             ..default()
         },
     )).id();
-    commands.entity(root).add_child(header);
+    commands.entity(panel).add_child(header);
 
     // ── Recipe rows ──────────────────────────────────────────────────────────
-    for (i, recipe) in RECIPES.iter().enumerate() {
+    for (i, recipe) in runtime.recipes.iter().enumerate() {
         let row = commands.spawn(NodeBundle {
             style: Style {
                 flex_direction: FlexDirection::Column,
@@ -253,7 +482,7 @@ fn setup_crafting_ui(mut commands: Commands) {
 
         // Recipe name
         let name_txt = commands.spawn(TextBundle::from_section(
-            recipe.name,
+            recipe.name.clone(),
             TextStyle {
                 font_size: 13.0,
                 color:     Color::srgba(0.90, 0.90, 1.00, 1.0),
@@ -311,7 +540,24 @@ fn setup_crafting_ui(mut commands: Commands) {
         commands.entity(btn).add_child(btn_label);
 
         commands.entity(row).push_children(&[name_txt, ing_txt, out_txt, btn]);
-        commands.entity(root).add_child(row);
+        commands.entity(panel).add_child(row);
+    }
+}
+
+/// When [`RuntimeRecipes`] changes (content file added/edited/removed),
+/// tear down the panel's existing rows and regenerate them so the new
+/// recipe list is visible without restarting the editor.
+fn refill_crafting_panel_on_change(
+    mut commands: Commands,
+    runtime: Res<RuntimeRecipes>,
+    panel_q: Query<Entity, With<CraftingPanel>>,
+) {
+    if !runtime.is_changed() {
+        return;
+    }
+    for panel in &panel_q {
+        commands.entity(panel).despawn_descendants();
+        fill_crafting_panel(&mut commands, panel, &runtime);
     }
 }
 
@@ -329,6 +575,7 @@ pub fn toggle_crafting_ui(
 pub fn update_crafting_ui(
     state:     Res<CraftingUiState>,
     inventory: Res<Inventory>,
+    runtime:   Res<RuntimeRecipes>,
     mut panel_q: Query<&mut Visibility, With<CraftingPanel>>,
     mut btn_q:   Query<(&CraftButton, &mut BackgroundColor)>,
     mut label_q: Query<(&RecipeStatusText, &mut Text)>,
@@ -340,7 +587,8 @@ pub fn update_crafting_ui(
     if !state.is_open { return; }
 
     for (btn, mut bg) in &mut btn_q {
-        let craftable = can_craft(&RECIPES[btn.recipe_index], &inventory);
+        let Some(recipe) = runtime.recipes.get(btn.recipe_index) else { continue };
+        let craftable = can_craft(recipe, &inventory);
         *bg = if craftable {
             BackgroundColor(Color::srgba(0.18, 0.55, 0.18, 0.95))
         } else {
@@ -349,7 +597,8 @@ pub fn update_crafting_ui(
     }
 
     for (label, mut text) in &mut label_q {
-        let craftable = can_craft(&RECIPES[label.recipe_index], &inventory);
+        let Some(recipe) = runtime.recipes.get(label.recipe_index) else { continue };
+        let craftable = can_craft(recipe, &inventory);
         if let Some(s) = text.sections.first_mut() {
             s.value = if craftable {
                 "Craft".to_string()
@@ -363,15 +612,16 @@ pub fn update_crafting_ui(
 
 /// Perform the craft when a button is pressed.
 pub fn handle_craft_buttons(
-    state:       Res<CraftingUiState>,
+    state:         Res<CraftingUiState>,
+    runtime:       Res<RuntimeRecipes>,
     mut inventory: ResMut<Inventory>,
-    btn_q:       Query<(&CraftButton, &Interaction), Changed<Interaction>>,
+    btn_q:         Query<(&CraftButton, &Interaction), Changed<Interaction>>,
 ) {
     if !state.is_open { return; }
 
     for (btn, interaction) in &btn_q {
         if *interaction == Interaction::Pressed {
-            let recipe = &RECIPES[btn.recipe_index];
+            let Some(recipe) = runtime.recipes.get(btn.recipe_index) else { continue };
             if can_craft(recipe, &inventory) {
                 do_craft(recipe, &mut inventory);
             }

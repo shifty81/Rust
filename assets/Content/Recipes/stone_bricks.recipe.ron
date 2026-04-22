@@ -1,0 +1,12 @@
+// Stone Bricks
+//
+// Stone + Gravel → Sandstone.  A multi-ingredient recipe demonstrating that
+// the RON loader supports arbitrary ingredient lists.
+(
+    name: "Stone Bricks",
+    ingredients: [
+        (voxel: "Stone",  count: 2),
+        (voxel: "Gravel", count: 1),
+    ],
+    output: (voxel: "Sandstone", count: 3),
+)

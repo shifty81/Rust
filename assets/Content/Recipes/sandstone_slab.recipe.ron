@@ -1,0 +1,11 @@
+// Sandstone Slab
+//
+// Sand → Sandstone.  Lets the player produce structural sandstone from
+// loose desert sand.
+(
+    name: "Sandstone Slab",
+    ingredients: [
+        (voxel: "Sand", count: 3),
+    ],
+    output: (voxel: "Sandstone", count: 2),
+)
