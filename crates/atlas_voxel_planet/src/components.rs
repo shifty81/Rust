@@ -54,6 +54,10 @@ pub struct ChunkDirty;
 #[derive(Component)]
 pub struct ManuallyEdited;
 
+/// A star in the background star field.
+#[derive(Component)]
+pub struct Star;
+
 /// A tree entity.
 #[derive(Component)]
 pub struct Tree;

@@ -10,6 +10,7 @@ use crate::biome::{biome_surface_color, classify_biome, voxel_for_depth, Voxel};
 use crate::components::*;
 use crate::config::*;
 use crate::RegenerateWorld;
+use crate::VoxelWorldEnabled;
 
 // ---------------------------------------------------------------------------
 //  Noise + material cache
@@ -103,8 +104,14 @@ impl Plugin for PlanetPlugin {
             .init_resource::<NoiseSeed>()
             .init_resource::<WorldSettings>()
             .init_resource::<ChunkViewpoint>()
+            .init_resource::<VoxelWorldEnabled>()
             .add_event::<RegenerateWorld>()
-            .add_systems(Startup, (setup_planet, init_noise_cache).chain())
+            .add_systems(
+                Startup,
+                (setup_planet, init_noise_cache)
+                    .chain()
+                    .run_if(|e: Res<VoxelWorldEnabled>| e.0),
+            )
             .add_systems(
                 Update,
                 (
@@ -117,7 +124,8 @@ impl Plugin for PlanetPlugin {
                     poll_chunk_generation_tasks,
                     remesh_dirty_chunks,
                 )
-                    .chain(),
+                    .chain()
+                    .run_if(|e: Res<VoxelWorldEnabled>| e.0),
             );
     }
 }

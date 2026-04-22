@@ -51,6 +51,24 @@ pub use wildlife::WildlifePlugin;
 pub use world_io::{SaveWorldRequest, LoadWorldRequest, WorldIoPlugin};
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Voxel-world on/off toggle
+// ─────────────────────────────────────────────────────────────────────────────
+
+/// Controls whether the voxel world (solar system, planet terrain) should be
+/// active.
+///
+/// Default is `true` (normal editor sandbox mode).  Set to `false` before
+/// `app.run()` when the editor is linked to a Nova-Forge game repository so
+/// that the default planet demo is suppressed in favour of an empty viewport
+/// waiting for game content.
+#[derive(bevy::prelude::Resource, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct VoxelWorldEnabled(pub bool);
+
+impl Default for VoxelWorldEnabled {
+    fn default() -> Self { Self(true) }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Plugin groups
 // ─────────────────────────────────────────────────────────────────────────────
 

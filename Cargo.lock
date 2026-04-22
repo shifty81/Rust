@@ -450,6 +450,7 @@ dependencies = [
  "atlas_voxel_planet",
  "bevy",
  "bevy_egui",
+ "ron",
 ]
 
 [[package]]
@@ -590,6 +591,7 @@ version = "0.1.0"
 dependencies = [
  "atlas_core",
  "atlas_editor_core",
+ "atlas_editor_project",
  "atlas_gizmos",
  "atlas_selection",
  "atlas_voxel_planet",

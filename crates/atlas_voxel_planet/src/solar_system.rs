@@ -4,15 +4,23 @@ use std::f32::consts::PI;
 
 use crate::components::*;
 use crate::config::*;
+use crate::VoxelWorldEnabled;
 
 pub struct SolarSystemPlugin;
 
 impl Plugin for SolarSystemPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, (setup_solar_system, setup_star_field))
+        app.init_resource::<VoxelWorldEnabled>()
+            .add_systems(
+                Startup,
+                (setup_solar_system, setup_star_field)
+                    .run_if(|e: Res<VoxelWorldEnabled>| e.0),
+            )
             .add_systems(
                 Update,
-                (update_orbits, update_self_rotations, update_sun_light).chain(),
+                (update_orbits, update_self_rotations, update_sun_light)
+                    .chain()
+                    .run_if(|e: Res<VoxelWorldEnabled>| e.0),
             );
     }
 }
@@ -232,6 +240,7 @@ fn setup_star_field(
                     .with_scale(Vec3::splat(scale)),
                 ..default()
             },
+            Star,
             Name::new("Star"),
         ));
     }

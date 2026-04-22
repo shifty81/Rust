@@ -18,6 +18,7 @@ use bevy::render::camera::Viewport;
 use bevy::window::PrimaryWindow;
 use bevy_egui::{egui, EguiContexts};
 use atlas_editor_core::{EditorCamera, EditorMode, EditorPanelOrder, EntityLabel, ViewportRect};
+use atlas_editor_project::GameLinkState;
 use atlas_gizmos::{GizmoInteraction, GizmoMode};
 use atlas_selection::{FocusedEntity, SelectedEntities, SelectionChanged};
 use atlas_voxel_planet::{ChunkManager, ChunkViewpoint, VoxelChunk, CHUNK_SIZE, PLANET_RADIUS, SUN_DISTANCE, VOXEL_SIZE};
@@ -389,6 +390,7 @@ fn draw_viewport_panel(
     cam_q:             Query<(&Transform, &EditorCameraState), With<EditorCamera>>,
     diagnostics:       Res<DiagnosticsStore>,
     gizmo_mode:        Res<GizmoMode>,
+    game_link:         Res<GameLinkState>,
     mut viewport_rect: ResMut<ViewportRect>,
 ) {
     let ctx = contexts.ctx_mut();
@@ -447,12 +449,29 @@ fn draw_viewport_panel(
                                     .strong(),
                             );
                             ui.separator();
-                            ui.label(
-                                egui::RichText::new("Editor Sandbox — spherical planet (not the game world)")
-                                    .color(egui::Color32::from_rgb(200, 160, 80))
+                            if game_link.is_linked() {
+                                let proj_name = game_link
+                                    .game_path
+                                    .as_ref()
+                                    .and_then(|p| p.file_name())
+                                    .and_then(|n| n.to_str())
+                                    .unwrap_or("Nova-Forge");
+                                ui.label(
+                                    egui::RichText::new(
+                                        format!("Nova-Forge project: {proj_name} — viewport ready for game content"),
+                                    )
+                                    .color(egui::Color32::from_rgb(100, 210, 160))
                                     .italics()
                                     .small(),
-                            );
+                                );
+                            } else {
+                                ui.label(
+                                    egui::RichText::new("Editor Sandbox — spherical planet (not the game world)")
+                                        .color(egui::Color32::from_rgb(200, 160, 80))
+                                        .italics()
+                                        .small(),
+                                );
+                            }
                         });
 
                         // ── Camera info ───────────────────────────────────
@@ -462,17 +481,26 @@ fn draw_viewport_panel(
                             let alt_km = (dist - PLANET_RADIUS) / 1_000.0;
                             let sun_dist_km = (p - Vec3::new(SUN_DISTANCE, 0.0, 0.0)).length() / 1_000.0;
 
-                            ui.horizontal(|ui| {
-                                ui.label(format!(
-                                    "Pos ({:.0}, {:.0}, {:.0})  alt {}{:.1} km  speed {:.0} m/s",
-                                    p.x, p.y, p.z,
-                                    if alt_km < 0.0 { "-" } else { "+" },
-                                    alt_km.abs(),
-                                    state.speed,
-                                ));
-                                ui.separator();
-                                ui.label(format!("☀  {:.0} km", sun_dist_km));
-                            });
+                            if game_link.is_linked() {
+                                ui.horizontal(|ui| {
+                                    ui.label(format!(
+                                        "Pos ({:.0}, {:.0}, {:.0})  speed {:.0} m/s",
+                                        p.x, p.y, p.z, state.speed,
+                                    ));
+                                });
+                            } else {
+                                ui.horizontal(|ui| {
+                                    ui.label(format!(
+                                        "Pos ({:.0}, {:.0}, {:.0})  alt {}{:.1} km  speed {:.0} m/s",
+                                        p.x, p.y, p.z,
+                                        if alt_km < 0.0 { "-" } else { "+" },
+                                        alt_km.abs(),
+                                        state.speed,
+                                    ));
+                                    ui.separator();
+                                    ui.label(format!("☀  {:.0} km", sun_dist_km));
+                                });
+                            }
 
                             ui.label(
                                 egui::RichText::new(
@@ -486,6 +514,40 @@ fn draw_viewport_panel(
                         }
                     });
                 });
+
+            // ── Nova-Forge placeholder: centred message when linked and scene is empty ─
+            if game_link.is_linked() {
+                let center = rect.center();
+                egui::Area::new(egui::Id::new("atlas_nova_forge_placeholder"))
+                    .fixed_pos(egui::pos2(center.x - 220.0, center.y - 40.0))
+                    .order(egui::Order::Background)
+                    .show(ui.ctx(), |ui| {
+                        egui::Frame::none()
+                            .fill(egui::Color32::from_rgba_unmultiplied(10, 14, 18, 180))
+                            .inner_margin(egui::Margin::symmetric(24.0, 16.0))
+                            .rounding(egui::Rounding::same(8.0))
+                            .show(ui, |ui| {
+                                ui.set_width(440.0);
+                                ui.vertical_centered(|ui| {
+                                    ui.label(
+                                        egui::RichText::new("🎮  Nova-Forge Project Linked")
+                                            .color(egui::Color32::from_rgb(100, 210, 160))
+                                            .size(18.0)
+                                            .strong(),
+                                    );
+                                    ui.add_space(6.0);
+                                    ui.label(
+                                        egui::RichText::new(
+                                            "The editor sandbox is suppressed while a game repo is linked.\n\
+                                             Open a scene or use File → Import to load game content."
+                                        )
+                                        .color(egui::Color32::from_rgb(180, 180, 180))
+                                        .small(),
+                                    );
+                                });
+                            });
+                    });
+            }
         });
 }
 
