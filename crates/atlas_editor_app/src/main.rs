@@ -40,11 +40,15 @@ use atlas_editor_voxel_tools::VoxelToolsPlugin;
 use atlas_editor_export::EditorExportPlugin;
 
 fn main() {
-    // Bevy's file-watcher (enabled below for hot-reload) panics if the watched
-    // path does not exist as a directory.  Ensure `assets/` is present relative
-    // to the working directory before building the App so the watcher always
-    // has a valid path to watch, regardless of where the executable is invoked.
-    let _ = std::fs::create_dir_all("assets");
+    // Bevy's file-watcher (enabled below for hot-reload) requires an absolute
+    // path on Windows — the `notify` crate fails with a relative path even
+    // when the directory exists.  Resolve `assets/` to an absolute path and
+    // ensure the directory exists before building the App.
+    let assets_dir = std::env::current_dir()
+        .unwrap_or_else(|_| std::path::PathBuf::from("."))
+        .join("assets");
+    let _ = std::fs::create_dir_all(&assets_dir);
+    let assets_path = assets_dir.to_string_lossy().into_owned();
 
     App::new()
         // ── Host window ──────────────────────────────────────────────────────
@@ -70,6 +74,7 @@ fn main() {
             // runtime so `AssetEvent::Modified` fires on edits under
             // `assets/Content/`.
             .set(AssetPlugin {
+                file_path: assets_path,
                 watch_for_changes_override: Some(true),
                 ..default()
             })
