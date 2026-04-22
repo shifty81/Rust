@@ -13,18 +13,14 @@
 //! | Source | Destination |
 //! |--------|-------------|
 //! | `project/Content/Recipes/*.recipe.ron` | `{game}/assets/voxygen/item/recipes/*.ron` |
-//! | [`WorldSettings`] noise params | `{game}/assets/world/world_config.ron` |
 //! | `project/Scenes/*.atlasscene` | `{game}/assets/world/sites/*.ron` (structural placement) |
 
 use std::path::{Path, PathBuf};
 
 use bevy::prelude::*;
-use ron::ser::PrettyConfig;
-use serde::{Deserialize, Serialize};
 
 use atlas_editor_project::GameLinkState;
 use atlas_editor_log::OutputLog;
-use atlas_voxel_planet::{WorldSettings, NoiseSeed};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Public events
@@ -43,30 +39,6 @@ pub struct ExportToGameRequest;
 /// is shown.
 #[derive(Event, Debug, Clone, Copy)]
 pub struct LaunchGameRequest;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Exportable world config schema
-// ─────────────────────────────────────────────────────────────────────────────
-
-/// A minimal world-configuration struct that can be written to
-/// `{game}/assets/world/world_config.ron` and read by Nova-Forge's world
-/// generator.
-///
-/// Field names match the expected keys in the game's `WorldOpts`-compatible
-/// RON schema.
-#[derive(Debug, Serialize, Deserialize)]
-pub struct WorldConfigExport {
-    pub noise_seed:         u32,
-    pub max_terrain_height: f32,
-    pub terrain_noise_scale: f32,
-    pub moisture_noise_scale: f32,
-    pub noise_octaves:      usize,
-    pub noise_lacunarity:   f64,
-    pub noise_persistence:  f64,
-    pub cave_enabled:       bool,
-    pub cave_scale:         f64,
-    pub cave_threshold:     f32,
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plugin
@@ -90,8 +62,6 @@ impl Plugin for EditorExportPlugin {
 fn handle_export(
     mut events:   EventReader<ExportToGameRequest>,
     game_link:    Res<GameLinkState>,
-    settings:     Res<WorldSettings>,
-    seed:         Res<NoiseSeed>,
     mut log:      ResMut<OutputLog>,
 ) {
     for _ev in events.read() {
@@ -102,12 +72,7 @@ fn handle_export(
 
         log.info(format!("[Export] Exporting to: {}", game_path.display()));
 
-        // ── 1. World Config ────────────────────────────────────────────────
-        if let Err(e) = export_world_config(game_path, &settings, seed.0, &mut log) {
-            log.error(format!("[Export] World config failed: {e}"));
-        }
-
-        // ── 2. Recipes ─────────────────────────────────────────────────────
+        // ── 1. Recipes ─────────────────────────────────────────────────────
         let editor_recipes = PathBuf::from("project/Content/Recipes");
         if editor_recipes.exists() {
             if let Err(e) = export_recipes(game_path, &editor_recipes, &mut log) {
@@ -117,7 +82,7 @@ fn handle_export(
             log.info("[Export] No editor recipes found (project/Content/Recipes does not exist).");
         }
 
-        // ── 3. Scenes ──────────────────────────────────────────────────────
+        // ── 2. Scenes ──────────────────────────────────────────────────────
         let editor_scenes = PathBuf::from("project/Scenes");
         if editor_scenes.exists() {
             if let Err(e) = export_scenes(game_path, &editor_scenes, &mut log) {
@@ -180,37 +145,6 @@ fn handle_launch(
 // ─────────────────────────────────────────────────────────────────────────────
 // Export helpers
 // ─────────────────────────────────────────────────────────────────────────────
-
-fn export_world_config(
-    game_root: &Path,
-    settings:  &WorldSettings,
-    seed:      u32,
-    log:       &mut OutputLog,
-) -> Result<(), String> {
-    let dest = game_root.join("assets/world/world_config.ron");
-    ensure_dir(&dest)?;
-
-    let cfg = WorldConfigExport {
-        noise_seed:          seed,
-        max_terrain_height:  settings.max_terrain_height,
-        terrain_noise_scale: settings.terrain_noise_scale as f32,
-        moisture_noise_scale: settings.moisture_noise_scale as f32,
-        noise_octaves:       settings.noise_octaves,
-        noise_lacunarity:    settings.noise_lacunarity,
-        noise_persistence:   settings.noise_persistence,
-        cave_enabled:        settings.cave_enabled,
-        cave_scale:          settings.cave_scale,
-        cave_threshold:      settings.cave_threshold,
-    };
-
-    let text = ron::ser::to_string_pretty(&cfg, PrettyConfig::default())
-        .map_err(|e| format!("serialise: {e}"))?;
-    std::fs::write(&dest, text)
-        .map_err(|e| format!("write: {e}"))?;
-
-    log.info(format!("[Export] wrote {}", dest.display()));
-    Ok(())
-}
 
 fn export_recipes(
     game_root:    &Path,

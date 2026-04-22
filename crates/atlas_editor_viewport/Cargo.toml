@@ -9,6 +9,7 @@ bevy              = { workspace = true }
 bevy_egui         = { workspace = true }
 atlas_core           = { workspace = true }
 atlas_editor_core    = { workspace = true }
+atlas_editor_project = { workspace = true }
 atlas_gizmos         = { workspace = true }
 atlas_selection      = { workspace = true }
 atlas_voxel_planet   = { workspace = true }

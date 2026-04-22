@@ -106,8 +106,8 @@ impl Default for PanelVisibility {
             details:         true,
             content_browser: true,
             output_log:      true,
-            world_settings:  true,
-            voxel_tools:     true,
+            world_settings:  false,
+            voxel_tools:     false,
             snap_toolbar:    true,
         }
     }

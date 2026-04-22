@@ -14,7 +14,6 @@ atlas_editor_scene   = { workspace = true }
 atlas_editor_play    = { workspace = true }
 atlas_editor_viewport = { workspace = true }
 atlas_commands       = { workspace = true }
-atlas_voxel_planet   = { workspace = true }
 atlas_gizmos         = { workspace = true }
 atlas_selection      = { workspace = true }
 atlas_scene          = { workspace = true }

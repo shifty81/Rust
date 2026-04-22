@@ -2,6 +2,7 @@
 //! and floating utility windows (undo history).
 
 use bevy::prelude::*;
+use bevy::window::PrimaryWindow;
 use bevy_egui::{egui, EguiContexts, EguiPlugin};
 use atlas_editor_core::{
     DeleteEntityRequest, DuplicateEntityRequest, EditorMode, EditorPanelOrder, PanelVisibility,
@@ -11,15 +12,11 @@ use atlas_editor_scene::{NewSceneRequest, OpenSceneRequest, SaveSceneRequest};
 use atlas_editor_play::{StartPie, StopPie, PausePie};
 use atlas_editor_viewport::TeleportEditorCamera;
 use atlas_commands::{UndoRequested, RedoRequested, CommandHistory};
-use atlas_voxel_planet::{SaveWorldRequest, LoadWorldRequest};
 use atlas_gizmos::{GizmoSpace, SnapSettings};
 use atlas_selection::FocusedEntity;
 use atlas_scene::{ActiveScenePath, SceneDirty};
-use atlas_editor_project::{GameLinkState, LinkGameRequest, UnlinkGameRequest};
+use atlas_editor_project::{GameLinkState, LinkGameRequest, UnlinkGameRequest, OpenProjectRequest};
 use atlas_editor_export::{ExportToGameRequest, LaunchGameRequest};
-
-/// Default path used when saving the voxel world data.
-const DEFAULT_WORLD_SAVE_PATH: &str = "world.voxelworld";
 
 /// Placeholder path used when no file dialog is available yet.
 const OPEN_SCENE_PLACEHOLDER: &str = "project/Scenes/untitled.atlasscene";
@@ -60,17 +57,21 @@ struct EditorUiState {
     export_requested: bool,
     /// Set by the Nova-Forge menu to request launching the game.
     launch_game_requested: bool,
+    /// Set by the Nova-Forge menu to open a folder picker and link a repo.
+    link_requested: bool,
+    /// Set by the Nova-Forge menu to unlink the current repo.
+    unlink_requested: bool,
+    /// Set by the File menu to open a folder picker and load a project.
+    open_project_requested: bool,
 }
 
-/// One of the seven panels togglable from the View menu.
+/// One of the panels togglable from the View menu.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PanelToggle {
     Outliner,
     Details,
     ContentBrowser,
     OutputLog,
-    WorldSettings,
-    VoxelTools,
     SnapToolbar,
 }
 
@@ -97,7 +98,7 @@ impl Plugin for EditorUiPlugin {
             .add_systems(
                 Update,
                 // Top panels: menu bar + snap toolbar (must precede side/central panels).
-                (draw_menu_bar, draw_nova_forge_menu, draw_snap_toolbar, draw_undo_history_window)
+                (draw_menu_bar, draw_snap_toolbar, draw_undo_history_window)
                     .chain()
                     .in_set(EditorPanelOrder::Top),
             )
@@ -107,7 +108,8 @@ impl Plugin for EditorUiPlugin {
                 (dispatch_ui_requests, dispatch_nova_forge_requests)
                     .chain()
                     .after(EditorPanelOrder::Central),
-            );
+            )
+            .add_systems(Update, update_window_title);
     }
 }
 
@@ -197,8 +199,6 @@ fn draw_menu_bar(
     mut stop_ev:       EventWriter<StopPie>,
     mut pause_ev:      EventWriter<PausePie>,
     mut teleport_ev:   EventWriter<TeleportEditorCamera>,
-    mut save_world_ev: EventWriter<SaveWorldRequest>,
-    mut load_world_ev: EventWriter<LoadWorldRequest>,
     mut spawn_ev:      EventWriter<SpawnEntityRequest>,
     mut ui_state:      ResMut<EditorUiState>,
 ) {
@@ -222,12 +222,8 @@ fn draw_menu_bar(
                     ui.close_menu();
                 }
                 ui.separator();
-                if ui.button("💾 Save World Data").clicked() {
-                    save_world_ev.send(SaveWorldRequest(DEFAULT_WORLD_SAVE_PATH.into()));
-                    ui.close_menu();
-                }
-                if ui.button("📂 Load World Data").clicked() {
-                    load_world_ev.send(LoadWorldRequest(DEFAULT_WORLD_SAVE_PATH.into()));
+                if ui.button("📁  Open Project…").clicked() {
+                    ui_state.open_project_requested = true;
                     ui.close_menu();
                 }
                 ui.separator();
@@ -312,20 +308,18 @@ fn draw_menu_bar(
             ui.menu_button("View", |ui| {
                 ui.label(egui::RichText::new("Editor Camera").weak().small());
                 ui.separator();
-                if ui.button("🌌  Solar System Overview  [Home]").clicked() {
-                    teleport_ev.send(TeleportEditorCamera::SolarSystem);
+                if ui.button("🔭  Far Overview  [Home]").clicked() {
+                    teleport_ev.send(TeleportEditorCamera::FarOverview);
                     ui.close_menu();
                 }
-                if ui.button("🌍  Planet Surface Overview  [End]").clicked() {
-                    teleport_ev.send(TeleportEditorCamera::PlanetSurface);
+                if ui.button("🎯  Near Overview  [End]").clicked() {
+                    teleport_ev.send(TeleportEditorCamera::NearOverview);
                     ui.close_menu();
                 }
                 ui.separator();
                 ui.label(egui::RichText::new("Panels").weak().small());
                 ui.separator();
 
-                // Helper — render a ✔-prefixed toggle that queues a
-                // PanelToggle for dispatch_ui_requests to apply.
                 let vis = ui_state.panel_visibility;
                 let mut toggle_item = |ui: &mut egui::Ui, visible: bool, label: &str, which: PanelToggle| {
                     let text = if visible {
@@ -343,8 +337,6 @@ fn draw_menu_bar(
                 toggle_item(ui, vis.details,         "Details",         PanelToggle::Details);
                 toggle_item(ui, vis.content_browser, "Content Browser", PanelToggle::ContentBrowser);
                 toggle_item(ui, vis.output_log,      "Output Log",      PanelToggle::OutputLog);
-                toggle_item(ui, vis.world_settings,  "🌍 World Settings", PanelToggle::WorldSettings);
-                toggle_item(ui, vis.voxel_tools,     "🧱 Voxel Tools",    PanelToggle::VoxelTools);
                 toggle_item(ui, vis.snap_toolbar,    "Snap Toolbar",    PanelToggle::SnapToolbar);
 
                 ui.separator();
@@ -356,6 +348,52 @@ fn draw_menu_bar(
                 if ui.button(hist_label).clicked() {
                     ui_state.undo_history_visible = !ui_state.undo_history_visible;
                     ui.close_menu();
+                }
+            });
+
+            // ── Nova-Forge ────────────────────────────────────────────────
+            ui.menu_button("Nova-Forge", |ui| {
+                let is_linked = ui_state.game_link_state.is_linked();
+
+                // Status header
+                let (status_text, status_color) = if is_linked {
+                    let path_str = ui_state.game_link_state.game_path
+                        .as_ref()
+                        .and_then(|p| p.file_name())
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("linked");
+                    (format!("✅  Linked: {path_str}"), egui::Color32::from_rgb(100, 220, 100))
+                } else {
+                    ("⚠  Not linked".to_owned(), egui::Color32::from_rgb(220, 140, 60))
+                };
+                ui.label(egui::RichText::new(status_text).color(status_color).small());
+                ui.separator();
+
+                // Link / re-link button is always available
+                let link_label = if is_linked {
+                    "🔗  Re-link Game Repo…"
+                } else {
+                    "🔗  Link Game Repo…"
+                };
+                if ui.button(link_label).clicked() {
+                    ui_state.link_requested = true;
+                    ui.close_menu();
+                }
+
+                if is_linked {
+                    if ui.button("🔓  Unlink").clicked() {
+                        ui_state.unlink_requested = true;
+                        ui.close_menu();
+                    }
+                    ui.separator();
+                    if ui.button("📤  Export to Game").clicked() {
+                        ui_state.export_requested = true;
+                        ui.close_menu();
+                    }
+                    if ui.button("▶  Launch Nova-Forge").clicked() {
+                        ui_state.launch_game_requested = true;
+                        ui.close_menu();
+                    }
                 }
             });
 
@@ -388,122 +426,71 @@ fn draw_menu_bar(
                 }
             }
 
-            // ── Scene name / dirty indicator (right-aligned) ─────────────
+            // ── Right-aligned: Nova-Forge status + scene name ─────────────
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                // Scene dirty indicator (rightmost)
                 let scene_text = if ui_state.scene_is_dirty {
                     format!("● {}", ui_state.active_scene_name)
                 } else {
                     ui_state.active_scene_name.clone()
                 };
-                let color = if ui_state.scene_is_dirty {
+                let scene_color = if ui_state.scene_is_dirty {
                     egui::Color32::from_rgb(255, 200, 80)
                 } else {
                     egui::Color32::from_rgb(160, 160, 160)
                 };
-                ui.label(egui::RichText::new(scene_text).color(color).small());
+                ui.label(egui::RichText::new(scene_text).color(scene_color).small());
+
+                ui.separator();
+
+                // Nova-Forge link status indicator
+                let (link_label, link_color) = if ui_state.game_link_state.is_linked() {
+                    ("🎮 Linked", egui::Color32::from_rgb(100, 220, 100))
+                } else {
+                    ("🎮 Not linked", egui::Color32::from_rgb(220, 140, 60))
+                };
+                ui.label(egui::RichText::new(link_label).small().color(link_color));
             });
         });
     });
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Nova-Forge integration menu  (separate system to stay within 16-param limit)
-// ────────────────────────────────────────────────────────────────────────────
-
-fn draw_nova_forge_menu(
-    mut contexts:    EguiContexts,
-    mut ui_state:    ResMut<EditorUiState>,
-    mut link_ev:     EventWriter<LinkGameRequest>,
-    mut unlink_ev:   EventWriter<UnlinkGameRequest>,
-) {
-    let ctx = contexts.ctx_mut();
-
-    // Append to the existing top menu bar that draw_menu_bar already opened.
-    egui::TopBottomPanel::top("atlas_nova_forge_menu")
-        .exact_height(0.0)
-        .show(ctx, |_ui| {
-            // Panel height is zero — the actual menu entry is added to the
-            // *already-open* bar by appending to the same panel id.
-        });
-
-    // Draw as a separate top panel with zero height to attach to the bar
-    // frame; egui coalesces consecutive TopBottomPanels::top into a single
-    // pixel row, so we need to use a floating Area or extend the first bar.
-    // The cleanest approach: re-open the same bar id and add menu entries.
-    egui::TopBottomPanel::top("atlas_menu_bar_nova_forge")
-        .exact_height(22.0)
-        .show_separator_line(false)
-        .show(ctx, |ui| {
-            egui::menu::bar(ui, |ui| {
-                // ── Nova-Forge menu ───────────────────────────────────────
-                ui.menu_button("Nova-Forge", |ui| {
-                    let is_linked = ui_state.game_link_state.is_linked();
-
-                    // Status header
-                    let (status_text, status_color) = if is_linked {
-                        let path_str = ui_state.game_link_state.game_path
-                            .as_ref()
-                            .and_then(|p| p.file_name())
-                            .and_then(|n| n.to_str())
-                            .unwrap_or("linked");
-                        (format!("Linked: {path_str}"), egui::Color32::from_rgb(100, 220, 100))
-                    } else {
-                        ("Not linked".to_owned(), egui::Color32::from_rgb(180, 100, 100))
-                    };
-                    ui.label(egui::RichText::new(status_text).color(status_color).small());
-                    ui.separator();
-
-                    // Link / re-link
-                    if ui.button("🔗  Link Game Repo…").clicked() {
-                        ui.close_menu();
-                        // rfd::FileDialog is a blocking modal OS dialog.  This
-                        // freezes the editor frame while the picker is open, which
-                        // is standard behaviour for OS file dialogs (the user
-                        // expects the app to wait).
-                        if let Some(folder) = rfd::FileDialog::new()
-                            .set_title("Select Nova-Forge repository root")
-                            .pick_folder()
-                        {
-                            link_ev.send(LinkGameRequest(folder));
-                        }
-                    }
-
-                    if is_linked {
-                        if ui.button("🔓  Unlink").clicked() {
-                            unlink_ev.send(UnlinkGameRequest);
-                            ui.close_menu();
-                        }
-                        ui.separator();
-                        if ui.button("📤  Export to Game").clicked() {
-                            ui_state.export_requested = true;
-                            ui.close_menu();
-                        }
-                        if ui.button("▶  Launch Nova-Forge").clicked() {
-                            ui_state.launch_game_requested = true;
-                            ui.close_menu();
-                        }
-                    }
-                });
-
-                // ── Status indicator (right of the Nova-Forge menu) ───────
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let (label, color) = if ui_state.game_link_state.is_linked() {
-                        ("🎮 Nova-Forge: Linked", egui::Color32::from_rgb(100, 220, 100))
-                    } else {
-                        ("🎮 Nova-Forge: Not linked", egui::Color32::from_rgb(160, 100, 100))
-                    };
-                    ui.label(egui::RichText::new(label).small().color(color));
-                });
-            });
-        });
-}
-
-/// Dispatch Nova-Forge requests queued by `draw_nova_forge_menu`.
+/// Dispatch Nova-Forge requests queued by `draw_menu_bar`.
+///
+/// Link/unlink open blocking OS dialogs (via `rfd`); export and launch are
+/// forwarded as Bevy events so the actual work happens in `atlas_editor_export`.
 fn dispatch_nova_forge_requests(
-    mut ui_state:   ResMut<EditorUiState>,
-    mut export_ev:  EventWriter<ExportToGameRequest>,
-    mut launch_ev:  EventWriter<LaunchGameRequest>,
+    mut ui_state:      ResMut<EditorUiState>,
+    mut open_proj_ev:  EventWriter<OpenProjectRequest>,
+    mut link_ev:       EventWriter<LinkGameRequest>,
+    mut unlink_ev:     EventWriter<UnlinkGameRequest>,
+    mut export_ev:     EventWriter<ExportToGameRequest>,
+    mut launch_ev:     EventWriter<LaunchGameRequest>,
 ) {
+    if ui_state.open_project_requested {
+        ui_state.open_project_requested = false;
+        if let Some(folder) = rfd::FileDialog::new()
+            .set_title("Select project root folder")
+            .pick_folder()
+        {
+            open_proj_ev.send(OpenProjectRequest(folder));
+        }
+    }
+    if ui_state.link_requested {
+        ui_state.link_requested = false;
+        // rfd::FileDialog is a blocking modal OS dialog — the editor frame
+        // freezes while the picker is open, which is expected behaviour.
+        if let Some(folder) = rfd::FileDialog::new()
+            .set_title("Select Nova-Forge repository root")
+            .pick_folder()
+        {
+            link_ev.send(LinkGameRequest(folder));
+        }
+    }
+    if ui_state.unlink_requested {
+        ui_state.unlink_requested = false;
+        unlink_ev.send(UnlinkGameRequest);
+    }
     if ui_state.export_requested {
         ui_state.export_requested = false;
         export_ev.send(ExportToGameRequest);
@@ -512,6 +499,24 @@ fn dispatch_nova_forge_requests(
         ui_state.launch_game_requested = false;
         launch_ev.send(LaunchGameRequest);
     }
+}
+
+/// Keep the OS window title in sync with the linked Nova-Forge project name.
+fn update_window_title(
+    game_link:   Res<GameLinkState>,
+    mut windows: Query<&mut Window, With<PrimaryWindow>>,
+) {
+    if !game_link.is_changed() { return; }
+    let Ok(mut window) = windows.get_single_mut() else { return; };
+    window.title = if let Some(proj_name) = game_link.game_path
+        .as_ref()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+    {
+        format!("Nova-Forge Editor — {proj_name}")
+    } else {
+        "Nova-Forge Editor".to_owned()
+    };
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -726,8 +731,6 @@ fn dispatch_ui_requests(
             PanelToggle::Details        => visibility.details         = !visibility.details,
             PanelToggle::ContentBrowser => visibility.content_browser = !visibility.content_browser,
             PanelToggle::OutputLog      => visibility.output_log      = !visibility.output_log,
-            PanelToggle::WorldSettings  => visibility.world_settings  = !visibility.world_settings,
-            PanelToggle::VoxelTools     => visibility.voxel_tools     = !visibility.voxel_tools,
             PanelToggle::SnapToolbar    => visibility.snap_toolbar    = !visibility.snap_toolbar,
         }
     }

@@ -1,18 +1,18 @@
-//! `atlas_editor_app` — Atlas Engine editor executable.
+//! `atlas_editor_app` — Nova-Forge Editor executable.
 //!
-//! This is the **single entry point** for the voxel engine.  The editor loads
-//! the full voxel world (solar system, planet terrain, atmosphere, vegetation)
-//! and provides a planet-aware free-fly camera for world inspection and editing.
+//! This is the **single entry point** for the Nova-Forge editor.  The editor
+//! starts with an empty viewport ready for Nova-Forge game content.  The voxel
+//! sandbox (solar system, procedural planet) is permanently disabled — it is
+//! not part of the Nova-Forge workflow.
 //!
-//! To explore a generated world, press **Play (▶)** to enter Play-In-Editor
-//! (PIE) mode, which spawns the first-person player controller directly inside
-//! the editor.  Press **Stop (■)** to return to the editor camera.
+//! Link a Nova-Forge game repository via **Edit → Nova-Forge** to enable
+//! game-asset browsing, content export, and game launching.
 
 use bevy::diagnostic::{EntityCountDiagnosticsPlugin, FrameTimeDiagnosticsPlugin};
 use bevy::log::LogPlugin;
 use bevy::prelude::*;
 
-// ── Voxel planet engine ──────────────────────────────────────────────────────
+// ── Voxel planet engine (resources / systems still registered; sandbox suppressed) ──
 use atlas_voxel_planet::{GameplayPlugins, WorldPlugins};
 
 // ── Shared infrastructure plugins ───────────────────────────────────────────
@@ -58,7 +58,7 @@ fn main() {
         .add_plugins(DefaultPlugins
             .set(WindowPlugin {
                 primary_window: Some(Window {
-                    title: "Atlas Editor — Voxel Planet".into(),
+                    title: "Nova-Forge Editor".into(),
                     ..default()
                 }),
                 ..default()
@@ -66,16 +66,11 @@ fn main() {
             .set(LogPlugin {
                 custom_layer: atlas_editor_log::build_editor_log_layer,
                 // Quiet the wgpu/Vulkan layers that emit validation spam every
-                // frame on some drivers — see `atlas_editor_log::EditorLogLayer`
-                // for the in-app VUID suppression.
+                // frame on some drivers.
                 filter: "info,wgpu_core=warn,wgpu_hal=warn,naga=warn".to_string(),
                 ..default()
             })
-            // Hot-reload authored RON content (recipes, biomes, voxels, …)
-            // while the editor is running.  Bevy's file-watcher feature is
-            // enabled at the workspace level; this flag turns it on at
-            // runtime so `AssetEvent::Modified` fires on edits under
-            // `assets/Content/`.
+            // Hot-reload authored RON content while the editor is running.
             .set(AssetPlugin {
                 file_path: assets_path,
                 watch_for_changes_override: Some(true),
@@ -90,14 +85,10 @@ fn main() {
         ))
 
         // ── Voxel planet engine ──────────────────────────────────────────────
-        // `WorldPlugins` = terrain / atmosphere / flora / fauna / world I/O —
-        // safe to have always on in the editor.
-        //
-        // `GameplayPlugins` = HUD, minimap, hotbar, crafting panel, dialogue,
-        // character rig, ambient audio, multiplayer.  Registered here so PIE
-        // can use them; `atlas_editor_play::toggle_gameplay_ui_visibility`
-        // hides their root UI nodes while in Editing mode so they don't fight
-        // the editor panels for screen space.
+        // WorldPlugins / GameplayPlugins register resources and systems used
+        // by editor panels (ChunkManager, WorldSettings, PIE, etc.).
+        // VoxelWorldEnabled defaults to false so no sandbox entities are ever
+        // spawned — the viewport stays empty, ready for Nova-Forge content.
         .add_plugins(WorldPlugins)
         .add_plugins(GameplayPlugins)
 
@@ -131,3 +122,4 @@ fn main() {
 
         .run();
 }
+

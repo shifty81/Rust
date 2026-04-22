@@ -41,7 +41,7 @@ impl Default for ProjectSettings {
     fn default() -> Self {
         Self {
             version:       PROJECT_SETTINGS_VERSION,
-            project_name:  "Atlas Engine Project".into(),
+            project_name:  "Nova-Forge Project".into(),
             content_root:  PathBuf::from("project/Content"),
             scenes_root:   PathBuf::from("project/Scenes"),
             prefabs_root:  PathBuf::from("project/Prefabs"),
