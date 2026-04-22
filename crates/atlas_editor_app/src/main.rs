@@ -37,6 +37,7 @@ use atlas_editor_ui::EditorUiPlugin;
 use atlas_editor_viewport::EditorViewportPlugin;
 use atlas_editor_world_settings::EditorWorldSettingsPlugin;
 use atlas_editor_voxel_tools::VoxelToolsPlugin;
+use atlas_editor_export::EditorExportPlugin;
 
 fn main() {
     App::new()
@@ -111,6 +112,7 @@ fn main() {
             EditorProjectPlugin,
             EditorWorldSettingsPlugin,
             VoxelToolsPlugin,
+            EditorExportPlugin,
         ))
 
         .run();

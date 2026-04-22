@@ -1,0 +1,15 @@
+[package]
+name    = "atlas_editor_export"
+version = "0.1.0"
+edition = "2021"
+description = "Content export pipeline: translates editor assets to Nova-Forge game-consumable RON files and handles game launch."
+
+[dependencies]
+bevy              = { workspace = true }
+serde             = { workspace = true }
+ron               = { workspace = true }
+atlas_editor_core    = { workspace = true }
+atlas_editor_project = { workspace = true }
+atlas_editor_log     = { workspace = true }
+atlas_voxel_planet   = { workspace = true }
+atlas_scene          = { workspace = true }
